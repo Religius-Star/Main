@@ -15,6 +15,29 @@ type FetchResult = {
 	body: string?,
 }
 
+local function isSupported(fn: any): boolean
+	return type(fn) == "function"
+end
+
+local function copyToClipboard(text: string): boolean
+	if isSupported(setclipboard) then
+		local ok = pcall(setclipboard, text)
+		if ok then return true end
+	end
+
+	if isSupported(toclipboard) then
+		local ok = pcall(toclipboard, text)
+		if ok then return true end
+	end
+
+	if isSupported(Clipboard) and isSupported(Clipboard.set) then
+		local ok = pcall(Clipboard.set, text)
+		if ok then return true end
+	end
+
+	return false
+end
+
 local function fetch(url: string): FetchResult
 	local ok, res = pcall(HttpService.RequestAsync, HttpService, {
 		Url = url,
@@ -22,15 +45,32 @@ local function fetch(url: string): FetchResult
 		Headers = HEADERS,
 	})
 
-	if not ok then
-		return { success = false, statusCode = nil, body = nil }
+	if ok and res then
+		return { success = true, statusCode = res.StatusCode, body = res.Body }
 	end
 
-	return {
-		success = true,
-		statusCode = res.StatusCode,
-		body = res.Body,
-	}
+	if isSupported(syn and syn.request or nil) then
+		local ok2, res2 = pcall(syn.request, { Url = url, Method = "GET", Headers = HEADERS })
+		if ok2 and res2 then
+			return { success = true, statusCode = res2.StatusCode, body = res2.Body }
+		end
+	end
+
+	if isSupported(http and http.request or nil) then
+		local ok3, res3 = pcall(http.request, { Url = url, Method = "GET", Headers = HEADERS })
+		if ok3 and res3 then
+			return { success = true, statusCode = res3.StatusCode, body = res3.Body }
+		end
+	end
+
+	if isSupported(request) then
+		local ok4, res4 = pcall(request, { Url = url, Method = "GET", Headers = HEADERS })
+		if ok4 and res4 then
+			return { success = true, statusCode = res4.StatusCode, body = res4.Body }
+		end
+	end
+
+	return { success = false, statusCode = nil, body = nil }
 end
 
 local function resolveInviteLink(): string
@@ -60,12 +100,7 @@ local function resolveInviteLink(): string
 	return BASE_URL
 end
 
-local ok, result = pcall(function()
+pcall(function()
 	local resolvedLink: string = resolveInviteLink()
-	setclipboard(resolvedLink)
-	print("[Discord] Copied:", resolvedLink)
+	copyToClipboard(resolvedLink)
 end)
-
-if not ok then
-	warn("[Discord] Error:", result)
-end
