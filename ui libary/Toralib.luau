@@ -692,7 +692,7 @@ local function createList(option, parent, holder)
 	
 	local main = library:Create("Frame", {
 		LayoutOrder = option.position,
-		Size = UDim2.new(1, 0, 0, 44),
+		Size = UDim2.new(1, 0, 0, 54),
 		BackgroundTransparency = 1,
 		Parent = parent.content
 	})
@@ -710,7 +710,7 @@ local function createList(option, parent, holder)
 	})
 	
 	local title = library:Create("TextLabel", {
-		Position = UDim2.new(0, 12, 0, 8),
+		Position = UDim2.new(0, 12, 0, 10),
 		Size = UDim2.new(1, -24, 0, 14),
 		BackgroundTransparency = 1,
 		Text = option.text,
@@ -722,11 +722,11 @@ local function createList(option, parent, holder)
 	})
 	
 	local listvalue = library:Create("TextLabel", {
-		Position = UDim2.new(0, 12, 0, 20),
-		Size = UDim2.new(1, -24, 0, 24),
+		Position = UDim2.new(0, 12, 0, 24),
+		Size = UDim2.new(1, -24, 0, 26),
 		BackgroundTransparency = 1,
 		Text = option.value,
-		TextSize = 15,
+		TextSize = 16,
 		Font = Enum.Font.GothamBlack,
 		TextColor3 = Color3.fromRGB(255, 255, 255),
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -734,7 +734,7 @@ local function createList(option, parent, holder)
 	})
 	
 	library:Create("ImageLabel", {
-		Position = UDim2.new(1, -16, 0, 16),
+		Position = UDim2.new(1, -16, 0, 18),
 		Size = UDim2.new(-1, 32, 1, -32),
 		SizeConstraint = Enum.SizeConstraint.RelativeYY,
 		Rotation = 90,
@@ -780,7 +780,7 @@ local function createList(option, parent, holder)
 	})
 	
 	layout.Changed:Connect(function()
-		option.mainHolder.Size = UDim2.new(0, 210, 0, (valueCount > 4 and (4 * 32) or layout.AbsoluteContentSize.Y) + 12)
+		option.mainHolder.Size = UDim2.new(0, 210, 0, (valueCount > 4 and (4 * 36) or layout.AbsoluteContentSize.Y) + 12)
 		content.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 12)
 	end)
 	
@@ -842,11 +842,11 @@ local function createList(option, parent, holder)
 		valueCount = valueCount + 1
 		local label = library:Create("TextLabel", {
 			ZIndex = 3,
-			Size = UDim2.new(1, 0, 0, 32),
+			Size = UDim2.new(1, 0, 0, 36),
 			BackgroundColor3 = Color3.fromRGB(30, 30, 30),
 			BorderSizePixel = 0,
 			Text = "   " .. value,
-			TextSize = 13,
+			TextSize = 14,
 			TextTransparency = self.open and 0 or 1,
 			Font = Enum.Font.GothamBlack,
 			TextColor3 = Color3.fromRGB(255, 255, 255),
