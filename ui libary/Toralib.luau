@@ -32,7 +32,27 @@ local function update(input)
 	local yPos = (startPos.Y.Offset + delta.Y) < -36 and -36 or startPos.Y.Offset + delta.Y
 	dragObject:TweenPosition(UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, yPos), "Out", "Quint", 0.1, true)
 end
- 
+
+ local function fixLabels()
+    task.defer(function()
+        for _, obj in ipairs(UI.base:GetDescendants()) do
+            if obj:IsA("TextLabel") then
+                obj.TextWrapped = true
+                obj.TextScaled = false
+                if not obj:FindFirstChildOfClass("UITextSizeConstraint") then
+                    local c = Instance.new("UITextSizeConstraint")
+                    c.MaxTextSize = 15
+                    c.MinTextSize = 8
+                    c.Parent = obj
+                end
+                if #obj.Text > 30 then
+                    obj.Size = UDim2.new(obj.Size.X.Scale, obj.Size.X.Offset, 0, 36)
+                end
+            end
+        end
+    end)
+end
+
 --From: https://devforum.roblox.com/t/how-to-create-a-simple-rainbow-effect-using-tweenService/221849/2
 local chromaColor
 local rainbowTime = 5
@@ -1814,5 +1834,5 @@ game:GetService('Players').LocalPlayer.Idled:Connect(function()
 VirtualUser:CaptureController()
 VirtualUser:ClickButton2(Vector2.new())
 end)
-
+fixLabels()
 return library
