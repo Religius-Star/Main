@@ -1,3 +1,6 @@
+--[[
+a
+]]
 local library = {flags = {}, windows = {}, open = true}
 
 --Services
@@ -43,17 +46,17 @@ task.spawn(function()
 	end
 end)
 
--- Accent color
-local ACCENT = Color3.fromRGB(255, 65, 65)
-local ACCENT_DIM = Color3.fromRGB(180, 40, 40)
-local BG_DARK = Color3.fromRGB(12, 12, 14)
-local BG_MID = Color3.fromRGB(18, 18, 22)
-local BG_LIGHT = Color3.fromRGB(28, 28, 34)
-local BG_HOVER = Color3.fromRGB(38, 38, 46)
-local TEXT_MAIN = Color3.fromRGB(240, 240, 245)
-local TEXT_DIM = Color3.fromRGB(130, 130, 145)
-local BORDER = Color3.fromRGB(45, 45, 55)
-local BORDER_FOCUS = Color3.fromRGB(80, 80, 100)
+-- Moonlight: Dark Teal + Moon-White
+local ACCENT       = Color3.fromRGB(72, 202, 196)   -- teal glow
+local ACCENT_DIM   = Color3.fromRGB(40, 130, 126)   -- dimmed teal
+local BG_DARK      = Color3.fromRGB(8,  14, 18)     -- deepest night
+local BG_MID       = Color3.fromRGB(12, 20, 26)     -- dark ocean
+local BG_LIGHT     = Color3.fromRGB(18, 30, 38)     -- lifted panel
+local BG_HOVER     = Color3.fromRGB(24, 40, 50)     -- hover state
+local TEXT_MAIN    = Color3.fromRGB(224, 240, 245)  -- moon-white
+local TEXT_DIM     = Color3.fromRGB(100, 145, 160)  -- muted teal-grey
+local BORDER       = Color3.fromRGB(28, 55, 68)     -- subtle teal border
+local BORDER_FOCUS = Color3.fromRGB(55, 120, 140)   -- focused teal border
 
 function library:Create(class, properties)
 	properties = typeof(properties) == "table" and properties or {}
@@ -265,7 +268,7 @@ function createToggle(option, parent)
 		AnchorPoint = Vector2.new(1, 0),
 		BackgroundTransparency = 1,
 		Image = "rbxassetid://3570695787",
-		ImageColor3 = option.state and ACCENT or Color3.fromRGB(50, 50, 60),
+		ImageColor3 = option.state and ACCENT or Color3.fromRGB(22, 42, 54),
 		ScaleType = Enum.ScaleType.Slice,
 		SliceCenter = Rect.new(100, 100, 100, 100),
 		SliceScale = 0.08,
@@ -287,7 +290,7 @@ function createToggle(option, parent)
 
 	local function applyState(state)
 		tweenService:Create(pillBg, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			ImageColor3 = state and ACCENT or Color3.fromRGB(50, 50, 60)
+			ImageColor3 = state and ACCENT or Color3.fromRGB(22, 42, 54)
 		}):Play()
 		tweenService:Create(pillKnob, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 			Position = state and UDim2.new(1, -7, 0.5, 0) or UDim2.new(0, 7, 0.5, 0)
@@ -372,7 +375,7 @@ function createButton(option, parent)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
 			inContact = true
 			if not clicking then
-				tweenService:Create(btnBg, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageColor3 = Color3.fromRGB(50, 50, 62)}):Play()
+				tweenService:Create(btnBg, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageColor3 = Color3.fromRGB(22, 50, 60)}):Play()
 				accentLine:TweenSize(UDim2.new(1, 0, 0, 1), "Out", "Quad", 0.3, true)
 			end
 		end
@@ -382,7 +385,7 @@ function createButton(option, parent)
 		if input.UserInputType == ui or input.UserInputType == Enum.UserInputType.Touch then
 			clicking = false
 			tweenService:Create(btnBg, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				ImageColor3 = inContact and Color3.fromRGB(50, 50, 62) or BG_HOVER
+				ImageColor3 = inContact and Color3.fromRGB(22, 50, 60) or BG_HOVER
 			}):Play()
 		end
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -440,7 +443,7 @@ local function createBind(option, parent)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
 			inContact = true
 			if not binding then
-				tweenService:Create(round, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageColor3 = Color3.fromRGB(55, 55, 68)}):Play()
+				tweenService:Create(round, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageColor3 = Color3.fromRGB(30, 70, 85)}):Play()
 			end
 		end
 	end)
@@ -516,7 +519,7 @@ local function createBind(option, parent)
 		else
 			bindinput.Text = self.key
 		end
-		tweenService:Create(round, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageColor3 = inContact and Color3.fromRGB(55, 55, 68) or BG_HOVER}):Play()
+		tweenService:Create(round, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageColor3 = inContact and Color3.fromRGB(30, 70, 85) or BG_HOVER}):Play()
 		round.Size = UDim2.new(0, -textService:GetTextSize(bindinput.Text, 13, Enum.Font.GothamBold, Vector2.new(9e9, 9e9)).X - 16, 0, 18)
 	end
 end
@@ -848,7 +851,7 @@ local function createList(option, parent, holder)
 
 		-- Animate background highlight on dropdown box
 		tweenService:Create(dropBg, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			ImageColor3 = Color3.fromRGB(48, 48, 60)
+			ImageColor3 = Color3.fromRGB(20, 50, 62)
 		}):Play()
 		tweenService:Create(dropBorder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			ImageColor3 = ACCENT, ImageTransparency = 0.5
@@ -897,7 +900,7 @@ local function createList(option, parent, holder)
 			inContact = true
 			if not option.open then
 				tweenService:Create(dropBg, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					ImageColor3 = Color3.fromRGB(44, 44, 56)
+					ImageColor3 = Color3.fromRGB(18, 46, 58)
 				}):Play()
 				tweenService:Create(chevron, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 					ImageColor3 = TEXT_MAIN
@@ -953,7 +956,7 @@ local function createList(option, parent, holder)
 			}):Play()
 			tweenService:Create(label, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 				TextColor3 = sel and ACCENT or TEXT_MAIN,
-				BackgroundColor3 = sel and Color3.fromRGB(38, 18, 18) or BG_MID
+				BackgroundColor3 = sel and Color3.fromRGB(10, 42, 50) or BG_MID
 			}):Play()
 		end
 
@@ -969,7 +972,7 @@ local function createList(option, parent, holder)
 			if input.UserInputType == ui or input.UserInputType == Enum.UserInputType.Touch then
 				rowClicking = true
 				tweenService:Create(label, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					BackgroundColor3 = Color3.fromRGB(28, 12, 12)
+					BackgroundColor3 = Color3.fromRGB(8, 34, 42)
 				}):Play()
 				self:SetValue(value)
 			end
@@ -1038,7 +1041,7 @@ local function createList(option, parent, holder)
 				end
 				tweenService:Create(label, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 					TextColor3 = sel and ACCENT or TEXT_MAIN,
-					BackgroundColor3 = sel and Color3.fromRGB(38, 18, 18) or BG_MID
+					BackgroundColor3 = sel and Color3.fromRGB(10, 42, 50) or BG_MID
 				}):Play()
 			end
 		end
@@ -1060,7 +1063,7 @@ local function createList(option, parent, holder)
 
 		-- Reset dropdown box color
 		tweenService:Create(dropBg, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			ImageColor3 = inContact and Color3.fromRGB(44, 44, 56) or BG_HOVER
+			ImageColor3 = inContact and Color3.fromRGB(18, 46, 58) or BG_HOVER
 		}):Play()
 		tweenService:Create(dropBorder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			ImageColor3 = BORDER, ImageTransparency = 0.3
@@ -1730,7 +1733,7 @@ function library:Init()
 	end
 	self.base.Parent = game:GetService"CoreGui"
 	self.base.ResetOnSpawn = true
-	self.base.Name = "ToraScript"
+	self.base.Name = "MoonlightUI"
 
 	for _, window in next, self.windows do
 		if window.canInit and not window.init then
