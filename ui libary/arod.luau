@@ -1,18 +1,13 @@
 --!nocheck
-
--- Fallbacks for non-executor environments
+local cloneref = cloneref or function(x) return x end
 local gethui   = gethui   or function() return game:GetService("CoreGui") end
-
-local TweenService: TweenService = game:GetService("TweenService")
-local UIS: UserInputService      = game:GetService("UserInputService")
-local Players: Players           = game:GetService("Players")
-local RunService: RunService     = game:GetService("RunService")
-local HttpService: HttpService   = game:GetService("HttpService")
+local TweenService: TweenService = cloneref(game:GetService("TweenService"))
+local UIS: UserInputService      = cloneref(game:GetService("UserInputService"))
+local Players: Players           = cloneref(game:GetService("Players"))
+local RunService: RunService     = cloneref(game:GetService("RunService"))
 local player: Player             = Players.LocalPlayer
 
--- ANTI-DUPE
-local existingGui = player:WaitForChild("PlayerGui"):FindFirstChild("455HubGui")
-	or gethui():FindFirstChild("455HubGui")
+local existingGui = player:WaitForChild("PlayerGui"):FindFirstChild("455HubGui") or gethui():FindFirstChild("455HubGui")
 if existingGui then existingGui:Destroy() end
 if _G["4557Running"] then
 	_G["4557Running"] = false
@@ -26,19 +21,15 @@ _G["4557Running"] = true
 local Lib   = {}
 Lib.__index = Lib
 
--- ─── ICON SYSTEM ──────────────────────────────────────────────────────────────
 local Icons: {[string]: string} = {}
 local ICON_URL = "https://raw.githubusercontent.com/Religius-Star/Main/refs/heads/main/config/icon.json"
 
 local function _loadIcons()
 	local ok, result = pcall(function()
-		local raw = HttpService:GetAsync(ICON_URL)
-		local fn = loadstring(raw)
-		if fn then
-			local data = fn()
-			if data and data.assets then
-				return data.assets
-			end
+		local raw = game:HttpGet(ICON_URL)
+		local iconData = loadstring(raw)()
+		if iconData and iconData.assets then
+			return iconData.assets
 		end
 		return nil
 	end)
@@ -56,7 +47,6 @@ local function _icon(name: string?): string?
 	return Icons[key]
 end
 
--- ─── THEME ────────────────────────────────────────────────────────────────────
 local T = {
 	BG         = Color3.fromRGB(10,  10,  14),
 	SURFACE    = Color3.fromRGB(18,  18,  24),
@@ -72,7 +62,6 @@ local T = {
 	WIN_Y      = 8,
 }
 
--- ─── TWEEN PRESETS ────────────────────────────────────────────────────────────
 local function tw(obj, t, props)
 	TweenService:Create(obj, TweenInfo.new(t, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
 end
@@ -80,7 +69,6 @@ local function twFast(obj, props) tw(obj, 0.12, props) end
 local function twMed(obj, props)  tw(obj, 0.22, props) end
 local function twSlow(obj, props) tw(obj, 0.35, props) end
 
--- ─── GUI ROOT ─────────────────────────────────────────────────────────────────
 local _gui: ScreenGui = Instance.new("ScreenGui")
 _gui.Name           = "455HubGui"
 _gui.ResetOnSpawn   = false
@@ -94,7 +82,6 @@ local _windows: {any}          = {}
 local _loaded: boolean         = false
 local _pendingShow: {() -> ()} = {}
 
--- ─── STYLE HELPERS ────────────────────────────────────────────────────────────
 local function _corner(obj: GuiObject, r: number?)
 	local c = Instance.new("UICorner", obj)
 	c.CornerRadius = UDim.new(0, r or 6)
@@ -121,22 +108,6 @@ local function _accentLine(parent: Frame)
 	line.Parent           = parent
 end
 
--- TextScaled label helper with size constraint
-local function _makeLabel(parent: Instance, props: {[string]: any}): TextLabel
-	local lbl: TextLabel = Instance.new("TextLabel")
-	lbl.BackgroundTransparency = 1
-	lbl.TextScaled             = true
-	lbl.Font                   = Enum.Font.GothamBold
-	lbl.TextColor3             = T.TEXT
-	lbl.TextXAlignment         = Enum.TextXAlignment.Left
-	for k, v in pairs(props) do
-		(lbl :: any)[k] = v
-	end
-	lbl.Parent = parent
-	return lbl
-end
-
--- Icon ImageLabel helper
 local function _makeIcon(parent: Instance, iconId: string, size: number?, color: Color3?): ImageLabel
 	local img: ImageLabel = Instance.new("ImageLabel")
 	img.Size                  = UDim2.new(0, size or 16, 0, size or 16)
@@ -171,10 +142,6 @@ local function _reposition()
 	end
 end
 
--- ─────────────────────────────────────────────────────────────────────────────
--- CREATE WINDOW
--- titleIcon: optional lucide icon name shown left of the title
--- ─────────────────────────────────────────────────────────────────────────────
 function Lib:CreateWindow(title: string, titleIcon: string?)
 	local winData: {[string]: any} = { shown = false }
 	table.insert(_windows, winData)
@@ -193,7 +160,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 	winData.frame = frame
 
-	-- Title bar
 	local titleBar: Frame = Instance.new("Frame")
 	titleBar.Size             = UDim2.new(1, 0, 0, T.TITLE_H)
 	titleBar.BackgroundColor3 = T.BG
@@ -203,7 +169,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	titleBar.Parent           = frame
 	_accentLine(titleBar)
 
-	-- Optional title icon
 	local iconId = _icon(titleIcon)
 	local titleTextX = 10
 	if iconId then
@@ -213,7 +178,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		titleTextX    = 30
 	end
 
-	-- Title text (TextScaled with constraint)
 	local titleLbl: TextLabel = Instance.new("TextLabel")
 	titleLbl.Size             = UDim2.new(1, -(titleTextX + 64), 1, -4)
 	titleLbl.Position         = UDim2.new(0, titleTextX, 0, 2)
@@ -229,7 +193,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	tsc.MinTextSize = 8
 	tsc.MaxTextSize = 15
 
-	-- Close button (X)
 	local closeBtn: TextButton = Instance.new("TextButton")
 	closeBtn.Size               = UDim2.new(0, 24, 0, 24)
 	closeBtn.AnchorPoint        = Vector2.new(1, 0.5)
@@ -279,11 +242,10 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		_reposition()
 	end)
 
-	-- Collapse/Expand button (minus/plus)
 	local colBtn: TextButton = Instance.new("TextButton")
 	colBtn.Size               = UDim2.new(0, 24, 0, 24)
 	colBtn.AnchorPoint        = Vector2.new(1, 0.5)
-	colBtn.Position           = UDim2.new(1, -34, 0.5, 0)  -- left of close
+	colBtn.Position           = UDim2.new(1, -34, 0.5, 0)
 	colBtn.Text               = ""
 	colBtn.BackgroundColor3   = T.SURFACE2
 	colBtn.ZIndex             = 12
@@ -303,7 +265,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		twFast(colImage, { ImageColor3 = T.TEXT_DIM })
 	end)
 
-	-- Scroll area
 	local scroll: ScrollingFrame = Instance.new("ScrollingFrame")
 	scroll.Size                   = UDim2.new(1, 0, 1, -T.TITLE_H)
 	scroll.Position               = UDim2.new(0, 0, 0, T.TITLE_H)
@@ -351,7 +312,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		end
 	end)
 
-	-- DRAG
 	local dragging  = false
 	local dragStart = Vector3.zero
 	local startPos  = UDim2.new()
@@ -385,7 +345,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		end
 	end)
 
-	-- ANTI OUT-OF-SCREEN
 	RunService.RenderStepped:Connect(function()
 		if not frame or not frame.Parent then return end
 		local sc  = workspace.CurrentCamera.ViewportSize
@@ -419,7 +378,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		frame.Position = UDim2.new(0, x, 0, y)
 	end
 
-	-- ── LABEL ──────────────────────────────────────────────────────────────────
 	function Win:Label(text: string)
 		local lbl: TextLabel = Instance.new("TextLabel")
 		lbl.Size                  = UDim2.new(1, 0, 0, 22)
@@ -437,7 +395,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		return lbl
 	end
 
-	-- ── SECTION ────────────────────────────────────────────────────────────────
 	function Win:Section(text: string)
 		local sec: Frame = Instance.new("Frame")
 		sec.Size                  = UDim2.new(1, 0, 0, 20)
@@ -476,7 +433,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		updateCanvas()
 	end
 
-	-- ── BUTTON ─────────────────────────────────────────────────────────────────
 	function Win:Button(text: string, callback: () -> (), icon: string?)
 		local btn: TextButton = Instance.new("TextButton")
 		btn.Size             = UDim2.new(1, 0, 0, 34)
@@ -545,7 +501,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		return btn
 	end
 
-	-- ── TOGGLE ─────────────────────────────────────────────────────────────────
 	function Win:Toggle(text: string, default: boolean, callback: (boolean) -> (), icon: string?)
 		local state: boolean = default or false
 
@@ -625,7 +580,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		return Tv
 	end
 
-	-- ── SLIDER ────────────────────────────────────────────────────────────────
 	function Win:Slider(text: string, min: number, max: number, default: number, callback: (number) -> ())
 		min = min or 0; max = max or 100
 		local val = math.clamp(default or min, min, max)
@@ -755,7 +709,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		return S
 	end
 
-	-- ── DROPDOWN ──────────────────────────────────────────────────────────────
 	function Win:Dropdown(headerText: string, options: {string}, callback: (string) -> (), icon: string?)
 		local selected = "Select..."
 		local open     = false
@@ -887,7 +840,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		return D
 	end
 
-	-- ── FOLDER ─────────────────────────────────────────────────────────────────
 	function Win:CreateFolder(folderName: string, folderIcon: string?)
 		local tabBtn: TextButton = Instance.new("TextButton")
 		tabBtn.Size             = UDim2.new(1, 0, 0, 30)
@@ -989,7 +941,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 		local function _fStyle(obj: GuiObject) _corner(obj, 5); _stroke(obj) end
 
-		-- Folder:Button
 		function Folder:Button(text: string, callback: () -> (), icon: string?)
 			local btn: TextButton = Instance.new("TextButton")
 			btn.Size             = UDim2.new(1, 0, 0, 32)
@@ -1056,7 +1007,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			updateCanvas(); return btn
 		end
 
-		-- Folder:Toggle
 		function Folder:Toggle(text: string, default: boolean, callback: (boolean) -> (), icon: string?)
 			local state = default or false
 			local row: TextButton = Instance.new("TextButton")
@@ -1133,7 +1083,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			return Tv
 		end
 
-		-- Folder:Slider
 		function Folder:Slider(text: string, min: number, max: number, default: number, callback: (number) -> ())
 			min = min or 0; max = max or 100
 			local val = math.clamp(default or min, min, max)
@@ -1233,7 +1182,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			return S
 		end
 
-		-- Folder:Dropdown
 		function Folder:Dropdown(headerText: string, options: {string}, callback: (string) -> (), icon: string?)
 			local selected = "Select..."
 			local open     = false
@@ -1363,7 +1311,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	return Win
 end
 
--- START
 function Lib:Start()
 	_loaded = true
 	for _, fn in ipairs(_pendingShow) do fn() end
