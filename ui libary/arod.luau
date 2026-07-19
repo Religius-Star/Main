@@ -1,14 +1,13 @@
 --!nocheck
 
 -- Fallbacks for non-executor environments
-local cloneref = cloneref or function(x) return x end
 local gethui   = gethui   or function() return game:GetService("CoreGui") end
 
-local TweenService: TweenService = cloneref(game:GetService("TweenService"))
-local UIS: UserInputService      = cloneref(game:GetService("UserInputService"))
-local Players: Players           = cloneref(game:GetService("Players"))
-local RunService: RunService     = cloneref(game:GetService("RunService"))
-local HttpService: HttpService   = cloneref(game:GetService("HttpService"))
+local TweenService: TweenService = game:GetService("TweenService")
+local UIS: UserInputService      = game:GetService("UserInputService")
+local Players: Players           = game:GetService("Players")
+local RunService: RunService     = game:GetService("RunService")
+local HttpService: HttpService   = game:GetService("HttpService")
 local player: Player             = Players.LocalPlayer
 
 -- ANTI-DUPE
@@ -30,12 +29,10 @@ Lib.__index = Lib
 -- ─── ICON SYSTEM ──────────────────────────────────────────────────────────────
 local Icons: {[string]: string} = {}
 local ICON_URL = "https://raw.githubusercontent.com/Religius-Star/Main/refs/heads/main/config/icon.json"
-local ICON_RETRIES = 3
 
-local function _loadIcons(retryCount)
-	retryCount = retryCount or 0
+local function _loadIcons()
 	local ok, result = pcall(function()
-		local raw = HttpService:GetAsync(ICON_URL)  -- no cache param
+		local raw = HttpService:GetAsync(ICON_URL)
 		local fn = loadstring(raw)
 		if fn then
 			local data = fn()
@@ -47,20 +44,8 @@ local function _loadIcons(retryCount)
 	end)
 	if ok and result then
 		Icons = result
-		return true
 	else
-		if retryCount < ICON_RETRIES then
-			task.wait(1)
-			return _loadIcons(retryCount + 1)
-		else
-			warn("[455Hub] Icon load failed after retries, icons disabled.")
-			-- Fallback: create a simple square icon for testing (optional)
-			-- You can comment out if you prefer no icon at all.
-			Icons = {
-				["lucide-fallback"] = "rbxassetid://0"  -- will show nothing
-			}
-			return false
-		end
+		warn("[455Hub] Icon load failed, icons disabled:", result)
 	end
 end
 _loadIcons()
@@ -81,10 +66,10 @@ local T = {
 	ACCENT_DIM = Color3.fromRGB(100, 10,  28),
 	TEXT       = Color3.fromRGB(240, 240, 245),
 	TEXT_DIM   = Color3.fromRGB(120, 120, 135),
-	TITLE_H    = 40,
-	WIN_W      = 220,
-	WIN_MAR    = 15,
-	WIN_Y      = 10,
+	TITLE_H    = 36,
+	WIN_W      = 200,
+	WIN_MAR    = 12,
+	WIN_Y      = 8,
 }
 
 -- ─── TWEEN PRESETS ────────────────────────────────────────────────────────────
@@ -127,25 +112,6 @@ local function _style(obj: GuiObject)
 	_stroke(obj)
 end
 
-local function _shadow(parent: Frame)
-	local sh: Frame = Instance.new("Frame")
-	sh.Name               = "_shadow"
-	sh.Size               = UDim2.new(1, 10, 1, 10)
-	sh.Position           = UDim2.new(0, -5, 0, 4)
-	sh.BackgroundColor3   = Color3.fromRGB(0, 0, 0)
-	sh.BackgroundTransparency = 0.55
-	sh.ZIndex             = parent.ZIndex - 1
-	sh.BorderSizePixel    = 0
-	_corner(sh, 8)
-	sh.Parent = parent.Parent
-	parent:GetPropertyChangedSignal("Position"):Connect(function()
-		sh.Position = UDim2.new(0, parent.Position.X.Offset - 5, 0, parent.Position.Y.Offset + 4)
-	end)
-	parent:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-		sh.Size = UDim2.new(0, parent.AbsoluteSize.X + 10, 0, parent.AbsoluteSize.Y + 10)
-	end)
-end
-
 local function _accentLine(parent: Frame)
 	local line: Frame = Instance.new("Frame")
 	line.Size             = UDim2.new(1, 0, 0, 2)
@@ -170,15 +136,14 @@ local function _makeLabel(parent: Instance, props: {[string]: any}): TextLabel
 	return lbl
 end
 
--- Icon ImageLabel helper – now with better fallback
+-- Icon ImageLabel helper
 local function _makeIcon(parent: Instance, iconId: string, size: number?, color: Color3?): ImageLabel
 	local img: ImageLabel = Instance.new("ImageLabel")
 	img.Size                  = UDim2.new(0, size or 16, 0, size or 16)
 	img.BackgroundTransparency = 1
-	img.Image                 = iconId or ""  -- if nil, it's empty
+	img.Image                 = iconId
 	img.ImageColor3           = color or T.TEXT_DIM
 	img.ScaleType             = Enum.ScaleType.Fit
-	img.ZIndex                = (parent.ZIndex or 0) + 2  -- ensure on top
 	img.Parent                = parent
 	return img
 end
@@ -225,7 +190,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	frame.Parent           = _gui
 	_corner(frame, 8)
 	_stroke(frame)
-	_shadow(frame)
 
 	winData.frame = frame
 
@@ -243,15 +207,15 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	local iconId = _icon(titleIcon)
 	local titleTextX = 10
 	if iconId then
-		local ico = _makeIcon(titleBar, iconId, 18, T.ACCENT)
-		ico.Position  = UDim2.new(0, 10, 0.5, -9)
+		local ico = _makeIcon(titleBar, iconId, 16, T.ACCENT)
+		ico.Position  = UDim2.new(0, 8, 0.5, -8)
 		ico.ZIndex    = 12
-		titleTextX    = 34
+		titleTextX    = 30
 	end
 
 	-- Title text (TextScaled with constraint)
 	local titleLbl: TextLabel = Instance.new("TextLabel")
-	titleLbl.Size             = UDim2.new(1, -(titleTextX + 38), 1, -4)
+	titleLbl.Size             = UDim2.new(1, -(titleTextX + 64), 1, -4)
 	titleLbl.Position         = UDim2.new(0, titleTextX, 0, 2)
 	titleLbl.BackgroundTransparency = 1
 	titleLbl.Text             = string.upper(title or "Window")
@@ -263,30 +227,80 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	titleLbl.Parent           = titleBar
 	local tsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", titleLbl)
 	tsc.MinTextSize = 8
-	tsc.MaxTextSize = 16
+	tsc.MaxTextSize = 15
 
-	-- Collapse button
+	-- Close button (X)
+	local closeBtn: TextButton = Instance.new("TextButton")
+	closeBtn.Size               = UDim2.new(0, 24, 0, 24)
+	closeBtn.AnchorPoint        = Vector2.new(1, 0.5)
+	closeBtn.Position           = UDim2.new(1, -6, 0.5, 0)
+	closeBtn.Text               = ""
+	closeBtn.BackgroundColor3   = T.SURFACE2
+	closeBtn.ZIndex             = 12
+	closeBtn.Parent             = titleBar
+	_corner(closeBtn, 5)
+
+	local closeIconId = _icon("x")
+	if closeIconId then
+		local img = _makeIcon(closeBtn, closeIconId, 14, T.TEXT_DIM)
+		img.Position = UDim2.new(0.5, -7, 0.5, -7)
+		img.ZIndex   = closeBtn.ZIndex + 1
+	else
+		closeBtn.Text = "✕"
+		closeBtn.TextScaled = true
+		closeBtn.Font = Enum.Font.GothamBold
+		closeBtn.TextColor3 = T.TEXT_DIM
+	end
+
+	closeBtn.MouseEnter:Connect(function()
+		twFast(closeBtn, { BackgroundColor3 = T.ACCENT })
+		if closeBtn:FindFirstChildOfClass("ImageLabel") then
+			twFast(closeBtn:FindFirstChildOfClass("ImageLabel"), { ImageColor3 = T.TEXT })
+		else
+			closeBtn.TextColor3 = T.TEXT
+		end
+	end)
+	closeBtn.MouseLeave:Connect(function()
+		twFast(closeBtn, { BackgroundColor3 = T.SURFACE2 })
+		if closeBtn:FindFirstChildOfClass("ImageLabel") then
+			twFast(closeBtn:FindFirstChildOfClass("ImageLabel"), { ImageColor3 = T.TEXT_DIM })
+		else
+			closeBtn.TextColor3 = T.TEXT_DIM
+		end
+	end)
+	closeBtn.MouseButton1Click:Connect(function()
+		frame:Destroy()
+		for i, w in ipairs(_windows) do
+			if w == winData then
+				table.remove(_windows, i)
+				break
+			end
+		end
+		_reposition()
+	end)
+
+	-- Collapse/Expand button (minus/plus)
 	local colBtn: TextButton = Instance.new("TextButton")
-	colBtn.Size               = UDim2.new(0, 26, 0, 26)
+	colBtn.Size               = UDim2.new(0, 24, 0, 24)
 	colBtn.AnchorPoint        = Vector2.new(1, 0.5)
-	colBtn.Position           = UDim2.new(1, -6, 0.5, 0)
-	colBtn.Text               = "─"
+	colBtn.Position           = UDim2.new(1, -34, 0.5, 0)  -- left of close
+	colBtn.Text               = ""
 	colBtn.BackgroundColor3   = T.SURFACE2
-	colBtn.Font               = Enum.Font.GothamBold
-	colBtn.TextScaled         = true
-	colBtn.TextColor3         = T.TEXT_DIM
 	colBtn.ZIndex             = 12
 	colBtn.Parent             = titleBar
 	_corner(colBtn, 5)
-	local csc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", colBtn)
-	csc.MinTextSize = 6
-	csc.MaxTextSize = 13
+
+	local colImage: ImageLabel = _makeIcon(colBtn, _icon("minus") or "", 14, T.TEXT_DIM)
+	colImage.Position = UDim2.new(0.5, -7, 0.5, -7)
+	colImage.ZIndex   = colBtn.ZIndex + 1
 
 	colBtn.MouseEnter:Connect(function()
-		twFast(colBtn, { BackgroundColor3 = T.ACCENT, TextColor3 = T.TEXT })
+		twFast(colBtn, { BackgroundColor3 = T.ACCENT })
+		twFast(colImage, { ImageColor3 = T.TEXT })
 	end)
 	colBtn.MouseLeave:Connect(function()
-		twFast(colBtn, { BackgroundColor3 = T.SURFACE2, TextColor3 = T.TEXT_DIM })
+		twFast(colBtn, { BackgroundColor3 = T.SURFACE2 })
+		twFast(colImage, { ImageColor3 = T.TEXT_DIM })
 	end)
 
 	-- Scroll area
@@ -300,24 +314,24 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	scroll.Parent                 = frame
 
 	local layout: UIListLayout = Instance.new("UIListLayout")
-	layout.Padding   = UDim.new(0, 5)
+	layout.Padding   = UDim.new(0, 4)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent    = scroll
 
 	local pad: UIPadding = Instance.new("UIPadding")
-	pad.PaddingTop    = UDim.new(0, 6)
-	pad.PaddingBottom = UDim.new(0, 6)
-	pad.PaddingLeft   = UDim.new(0, 6)
-	pad.PaddingRight  = UDim.new(0, 6)
+	pad.PaddingTop    = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 4)
+	pad.PaddingLeft   = UDim.new(0, 5)
+	pad.PaddingRight  = UDim.new(0, 5)
 	pad.Parent        = scroll
 
 	local collapsed: boolean = false
 	local function updateCanvas()
 		task.defer(function()
-			scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 12)
+			scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
 			if not collapsed then
 				frame.Size = UDim2.new(0, WIN_W, 0,
-					math.clamp(layout.AbsoluteContentSize.Y + T.TITLE_H + 12, 80, 420))
+					math.clamp(layout.AbsoluteContentSize.Y + T.TITLE_H + 8, 70, 380))
 			end
 		end)
 	end
@@ -326,13 +340,13 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	colBtn.MouseButton1Click:Connect(function()
 		collapsed = not collapsed
 		if collapsed then
-			colBtn.Text = "▾"
+			colImage.Image = _icon("plus") or ""
 			twMed(frame, { Size = UDim2.new(0, WIN_W, 0, T.TITLE_H) })
 		else
-			colBtn.Text = "─"
+			colImage.Image = _icon("minus") or ""
 			twMed(frame, {
 				Size = UDim2.new(0, WIN_W, 0,
-					math.clamp(layout.AbsoluteContentSize.Y + T.TITLE_H + 12, 80, 420))
+					math.clamp(layout.AbsoluteContentSize.Y + T.TITLE_H + 8, 70, 380))
 			})
 		end
 	end)
@@ -400,7 +414,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 	function Win:SetTitle(text: string, icon: string?)
 		titleLbl.Text = string.upper(text or "Window")
-		-- icon change not supported at runtime (would need to recreate the layout)
 	end
 	function Win:SetPosition(x: number, y: number)
 		frame.Position = UDim2.new(0, x, 0, y)
@@ -409,7 +422,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	-- ── LABEL ──────────────────────────────────────────────────────────────────
 	function Win:Label(text: string)
 		local lbl: TextLabel = Instance.new("TextLabel")
-		lbl.Size                  = UDim2.new(1, 0, 0, 26)
+		lbl.Size                  = UDim2.new(1, 0, 0, 22)
 		lbl.BackgroundTransparency = 1
 		lbl.Text                  = text or "Label"
 		lbl.Font                  = Enum.Font.GothamMedium
@@ -419,7 +432,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		lbl.LayoutOrder           = nxt()
 		lbl.Parent                = scroll
 		local sc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
-		sc.MaxTextSize = 13
+		sc.MaxTextSize = 12
 		updateCanvas()
 		return lbl
 	end
@@ -427,29 +440,29 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	-- ── SECTION ────────────────────────────────────────────────────────────────
 	function Win:Section(text: string)
 		local sec: Frame = Instance.new("Frame")
-		sec.Size                  = UDim2.new(1, 0, 0, 22)
+		sec.Size                  = UDim2.new(1, 0, 0, 20)
 		sec.BackgroundTransparency = 1
 		sec.LayoutOrder           = nxt()
 		sec.Parent                = scroll
 
 		local bar: Frame = Instance.new("Frame")
-		bar.Size             = UDim2.new(0, 3, 0.7, 0)
-		bar.Position         = UDim2.new(0, 0, 0.15, 0)
+		bar.Size             = UDim2.new(0, 3, 0.6, 0)
+		bar.Position         = UDim2.new(0, 0, 0.2, 0)
 		bar.BackgroundColor3 = T.ACCENT
 		bar.BorderSizePixel  = 0
 		bar.Parent           = sec
 		_corner(bar, 2)
 
 		local line: Frame = Instance.new("Frame")
-		line.Size             = UDim2.new(1, -10, 0, 1)
+		line.Size             = UDim2.new(1, -8, 0, 1)
 		line.Position         = UDim2.new(0, 8, 0.5, 0)
 		line.BackgroundColor3 = T.BORDER
 		line.BorderSizePixel  = 0
 		line.Parent           = sec
 
 		local sLbl: TextLabel = Instance.new("TextLabel")
-		sLbl.Size                  = UDim2.new(0.78, 0, 1, 0)
-		sLbl.Position              = UDim2.new(0, 12, 0, 0)
+		sLbl.Size                  = UDim2.new(0.76, 0, 1, 0)
+		sLbl.Position              = UDim2.new(0, 10, 0, 0)
 		sLbl.BackgroundColor3      = T.BG
 		sLbl.Text                  = text or ""
 		sLbl.TextColor3            = T.TEXT_DIM
@@ -458,35 +471,32 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		sLbl.TextXAlignment        = Enum.TextXAlignment.Left
 		sLbl.Parent                = sec
 		local sc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", sLbl)
-		sc2.MaxTextSize = 11
+		sc2.MaxTextSize = 10
 
 		updateCanvas()
 	end
 
 	-- ── BUTTON ─────────────────────────────────────────────────────────────────
-	-- Usage: Win:Button("Click me", function() print("clicked") end, "settings")
 	function Win:Button(text: string, callback: () -> (), icon: string?)
 		local btn: TextButton = Instance.new("TextButton")
-		btn.Size             = UDim2.new(1, 0, 0, 38)
+		btn.Size             = UDim2.new(1, 0, 0, 34)
 		btn.BackgroundColor3 = T.SURFACE
 		btn.Text             = ""
 		btn.LayoutOrder      = nxt()
 		btn.Parent           = scroll
 		_style(btn)
 
-		-- Left icon (optional)
-		local textOffsetL = 12
+		local textOffsetL = 10
 		local iconId = _icon(icon)
 		if iconId then
-			local ico = _makeIcon(btn, iconId, 16, T.ACCENT)
-			ico.Position  = UDim2.new(0, 10, 0.5, -8)
+			local ico = _makeIcon(btn, iconId, 14, T.ACCENT)
+			ico.Position  = UDim2.new(0, 8, 0.5, -7)
 			ico.ZIndex    = btn.ZIndex + 1
-			textOffsetL   = 32
+			textOffsetL   = 28
 		end
 
-		-- Button label — TextScaled inside a bounded frame
 		local lblFrame: Frame = Instance.new("Frame")
-		lblFrame.Size                  = UDim2.new(1, -(textOffsetL + 28), 1, -6)
+		lblFrame.Size                  = UDim2.new(1, -(textOffsetL + 24), 1, -6)
 		lblFrame.Position              = UDim2.new(0, textOffsetL, 0, 3)
 		lblFrame.BackgroundTransparency = 1
 		lblFrame.ZIndex                = btn.ZIndex + 1
@@ -503,12 +513,11 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		lbl.ZIndex                = btn.ZIndex + 1
 		lbl.Parent                = lblFrame
 		local bsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
-		bsc.MinTextSize = 9
-		bsc.MaxTextSize = 14
+		bsc.MinTextSize = 8
+		bsc.MaxTextSize = 13
 
-		-- Chevron right
 		local arr: TextLabel = Instance.new("TextLabel")
-		arr.Size               = UDim2.new(0, 18, 1, 0)
+		arr.Size               = UDim2.new(0, 16, 1, 0)
 		arr.AnchorPoint        = Vector2.new(1, 0.5)
 		arr.Position           = UDim2.new(1, -6, 0.5, 0)
 		arr.BackgroundTransparency = 1
@@ -519,8 +528,8 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		arr.ZIndex             = btn.ZIndex + 1
 		arr.Parent             = btn
 		local asc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", arr)
-		asc.MinTextSize = 10
-		asc.MaxTextSize = 20
+		asc.MinTextSize = 8
+		asc.MaxTextSize = 18
 
 		btn.MouseEnter:Connect(function()     twFast(btn, { BackgroundColor3 = T.SURFACE2 }) end)
 		btn.MouseLeave:Connect(function()     twFast(btn, { BackgroundColor3 = T.SURFACE })  end)
@@ -541,26 +550,24 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local state: boolean = default or false
 
 		local row: TextButton = Instance.new("TextButton")
-		row.Size             = UDim2.new(1, 0, 0, 38)
+		row.Size             = UDim2.new(1, 0, 0, 34)
 		row.BackgroundColor3 = T.SURFACE
 		row.Text             = ""
 		row.LayoutOrder      = nxt()
 		row.Parent           = scroll
 		_style(row)
 
-		-- Left icon (optional)
-		local textOffsetL = 12
+		local textOffsetL = 10
 		local iconId = _icon(icon)
 		if iconId then
-			local ico = _makeIcon(row, iconId, 16, T.TEXT_DIM)
-			ico.Position = UDim2.new(0, 10, 0.5, -8)
+			local ico = _makeIcon(row, iconId, 14, T.TEXT_DIM)
+			ico.Position = UDim2.new(0, 8, 0.5, -7)
 			ico.ZIndex   = row.ZIndex + 1
-			textOffsetL  = 32
+			textOffsetL  = 28
 		end
 
-		-- Label inside bounded frame (TextScaled)
 		local lblFrame: Frame = Instance.new("Frame")
-		lblFrame.Size                  = UDim2.new(1, -(textOffsetL + 54), 1, -6)
+		lblFrame.Size                  = UDim2.new(1, -(textOffsetL + 48), 1, -6)
 		lblFrame.Position              = UDim2.new(0, textOffsetL, 0, 3)
 		lblFrame.BackgroundTransparency = 1
 		lblFrame.ZIndex                = row.ZIndex + 1
@@ -577,31 +584,30 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		lbl.ZIndex                = row.ZIndex + 1
 		lbl.Parent                = lblFrame
 		local tsc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
-		tsc2.MinTextSize = 9
-		tsc2.MaxTextSize = 14
+		tsc2.MinTextSize = 8
+		tsc2.MaxTextSize = 13
 
-		-- Pill track
 		local pill: Frame = Instance.new("Frame")
-		pill.Size             = UDim2.new(0, 36, 0, 20)
+		pill.Size             = UDim2.new(0, 32, 0, 18)
 		pill.AnchorPoint      = Vector2.new(1, 0.5)
-		pill.Position         = UDim2.new(1, -10, 0.5, 0)
+		pill.Position         = UDim2.new(1, -8, 0.5, 0)
 		pill.BackgroundColor3 = state and T.ACCENT or T.SURFACE2
 		pill.ZIndex           = row.ZIndex + 1
 		pill.Parent           = row
-		_corner(pill, 10)
+		_corner(pill, 9)
 
 		local knob: Frame = Instance.new("Frame")
-		knob.Size             = UDim2.new(0, 14, 0, 14)
+		knob.Size             = UDim2.new(0, 12, 0, 12)
 		knob.AnchorPoint      = Vector2.new(0.5, 0.5)
-		knob.Position         = state and UDim2.new(1, -10, 0.5, 0) or UDim2.new(0, 10, 0.5, 0)
+		knob.Position         = state and UDim2.new(1, -9, 0.5, 0) or UDim2.new(0, 9, 0.5, 0)
 		knob.BackgroundColor3 = T.TEXT
 		knob.ZIndex           = row.ZIndex + 2
 		knob.Parent           = pill
-		_corner(knob, 7)
+		_corner(knob, 6)
 
 		local function applyState()
 			twMed(pill,  { BackgroundColor3 = state and T.ACCENT or T.SURFACE2 })
-			twMed(knob,  { Position = state and UDim2.new(1, -10, 0.5, 0) or UDim2.new(0, 10, 0.5, 0) })
+			twMed(knob,  { Position = state and UDim2.new(1, -9, 0.5, 0) or UDim2.new(0, 9, 0.5, 0) })
 		end
 
 		row.MouseEnter:Connect(function()     twFast(row, { BackgroundColor3 = T.SURFACE2 }) end)
@@ -625,16 +631,15 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local val = math.clamp(default or min, min, max)
 
 		local cont: Frame = Instance.new("Frame")
-		cont.Size             = UDim2.new(1, 0, 0, 66)
+		cont.Size             = UDim2.new(1, 0, 0, 60)
 		cont.BackgroundColor3 = T.SURFACE
 		cont.LayoutOrder      = nxt()
 		cont.Parent           = scroll
 		_style(cont)
 
-		-- Label frame (bounded, TextScaled)
 		local lblFrame: Frame = Instance.new("Frame")
-		lblFrame.Size                  = UDim2.new(0.62, -12, 0, 22)
-		lblFrame.Position              = UDim2.new(0, 12, 0, 6)
+		lblFrame.Size                  = UDim2.new(0.6, -8, 0, 20)
+		lblFrame.Position              = UDim2.new(0, 10, 0, 5)
 		lblFrame.BackgroundTransparency = 1
 		lblFrame.Parent                = cont
 
@@ -648,14 +653,13 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		tLbl.TextXAlignment     = Enum.TextXAlignment.Left
 		tLbl.Parent             = lblFrame
 		local slsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", tLbl)
-		slsc.MinTextSize = 9
-		slsc.MaxTextSize = 14
+		slsc.MinTextSize = 8
+		slsc.MaxTextSize = 13
 
-		-- Value box
 		local numBox: Frame = Instance.new("Frame")
-		numBox.Size             = UDim2.new(0, 40, 0, 22)
+		numBox.Size             = UDim2.new(0, 36, 0, 20)
 		numBox.AnchorPoint      = Vector2.new(1, 0)
-		numBox.Position         = UDim2.new(1, -10, 0, 6)
+		numBox.Position         = UDim2.new(1, -8, 0, 5)
 		numBox.BackgroundColor3 = T.SURFACE2
 		numBox.BorderSizePixel  = 0
 		numBox.Parent           = cont
@@ -674,13 +678,12 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		valTxt.TextYAlignment     = Enum.TextYAlignment.Center
 		valTxt.Parent             = numBox
 		local vtsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", valTxt)
-		vtsc.MinTextSize = 8
-		vtsc.MaxTextSize = 13
+		vtsc.MinTextSize = 7
+		vtsc.MaxTextSize = 12
 
-		-- Track
 		local bar: Frame = Instance.new("Frame")
-		bar.Size             = UDim2.new(1, -20, 0, 6)
-		bar.Position         = UDim2.new(0, 10, 0, 48)
+		bar.Size             = UDim2.new(1, -18, 0, 5)
+		bar.Position         = UDim2.new(0, 9, 0, 42)
 		bar.BackgroundColor3 = T.SURFACE2
 		bar.Parent           = cont
 		_corner(bar, 3)
@@ -693,13 +696,13 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		_corner(fill, 3)
 
 		local knob: Frame = Instance.new("Frame")
-		knob.Size             = UDim2.new(0, 14, 0, 14)
+		knob.Size             = UDim2.new(0, 12, 0, 12)
 		knob.AnchorPoint      = Vector2.new(0.5, 0.5)
 		knob.Position         = UDim2.new(ip, 0, 0.5, 0)
 		knob.BackgroundColor3 = T.TEXT
 		knob.ZIndex           = bar.ZIndex + 1
 		knob.Parent           = bar
-		_corner(knob, 7)
+		_corner(knob, 6)
 		_stroke(knob, T.ACCENT, 2)
 
 		local sliderDrag = false
@@ -758,27 +761,25 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local open     = false
 
 		local dropBtn: TextButton = Instance.new("TextButton")
-		dropBtn.Size             = UDim2.new(1, 0, 0, 48)
+		dropBtn.Size             = UDim2.new(1, 0, 0, 44)
 		dropBtn.BackgroundColor3 = T.SURFACE
 		dropBtn.Text             = ""
 		dropBtn.LayoutOrder      = nxt()
 		dropBtn.Parent           = scroll
 		_style(dropBtn)
 
-		-- Optional left icon
-		local textOffsetL = 12
+		local textOffsetL = 10
 		local iconId = _icon(icon)
 		if iconId then
-			local ico = _makeIcon(dropBtn, iconId, 16, T.ACCENT)
-			ico.Position = UDim2.new(0, 10, 0.5, -8)
+			local ico = _makeIcon(dropBtn, iconId, 14, T.ACCENT)
+			ico.Position = UDim2.new(0, 8, 0.5, -7)
 			ico.ZIndex   = dropBtn.ZIndex + 1
-			textOffsetL  = 32
+			textOffsetL  = 28
 		end
 
-		-- Header label (TextScaled)
 		local headLbl: TextLabel = Instance.new("TextLabel")
-		headLbl.Size               = UDim2.new(1, -(textOffsetL + 26), 0, 16)
-		headLbl.Position           = UDim2.new(0, textOffsetL, 0, 4)
+		headLbl.Size               = UDim2.new(1, -(textOffsetL + 24), 0, 14)
+		headLbl.Position           = UDim2.new(0, textOffsetL, 0, 3)
 		headLbl.BackgroundTransparency = 1
 		headLbl.Text               = headerText or "Dropdown"
 		headLbl.TextColor3         = T.TEXT_DIM
@@ -788,12 +789,11 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		headLbl.ZIndex             = dropBtn.ZIndex + 1
 		headLbl.Parent             = dropBtn
 		local hdsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", headLbl)
-		hdsc.MaxTextSize = 11
+		hdsc.MaxTextSize = 10
 
-		-- Selected label (TextScaled)
 		local selLbl: TextLabel = Instance.new("TextLabel")
-		selLbl.Size               = UDim2.new(1, -(textOffsetL + 30), 0, 20)
-		selLbl.Position           = UDim2.new(0, textOffsetL, 0, 20)
+		selLbl.Size               = UDim2.new(1, -(textOffsetL + 24), 0, 18)
+		selLbl.Position           = UDim2.new(0, textOffsetL, 0, 17)
 		selLbl.BackgroundTransparency = 1
 		selLbl.Text               = selected
 		selLbl.TextColor3         = T.TEXT
@@ -803,11 +803,10 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		selLbl.ZIndex             = dropBtn.ZIndex + 1
 		selLbl.Parent             = dropBtn
 		local sdsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", selLbl)
-		sdsc.MaxTextSize = 14
+		sdsc.MaxTextSize = 13
 
-		-- Arrow
 		local arrowLbl: TextLabel = Instance.new("TextLabel")
-		arrowLbl.Size               = UDim2.new(0, 20, 1, 0)
+		arrowLbl.Size               = UDim2.new(0, 18, 1, 0)
 		arrowLbl.AnchorPoint        = Vector2.new(1, 0.5)
 		arrowLbl.Position           = UDim2.new(1, -6, 0.5, 0)
 		arrowLbl.BackgroundTransparency = 1
@@ -819,7 +818,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		arrowLbl.ZIndex             = dropBtn.ZIndex + 1
 		arrowLbl.Parent             = dropBtn
 		local adsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", arrowLbl)
-		adsc.MaxTextSize = 18
+		adsc.MaxTextSize = 16
 
 		local dropFrame: Frame = Instance.new("Frame")
 		dropFrame.Size             = UDim2.new(1, 0, 0, 0)
@@ -827,25 +826,25 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		dropFrame.ClipsDescendants = true
 		dropFrame.LayoutOrder      = nxt()
 		dropFrame.Parent           = scroll
-		_corner(dropFrame, 6)
+		_corner(dropFrame, 5)
 		_stroke(dropFrame)
 
 		local dLayout = Instance.new("UIListLayout", dropFrame)
 		dLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		local dPad = Instance.new("UIPadding", dropFrame)
-		dPad.PaddingTop    = UDim.new(0, 3)
-		dPad.PaddingBottom = UDim.new(0, 3)
+		dPad.PaddingTop    = UDim.new(0, 2)
+		dPad.PaddingBottom = UDim.new(0, 2)
 
 		for _, v in ipairs(options or {}) do
 			local opt: TextButton = Instance.new("TextButton")
-			opt.Size             = UDim2.new(1, 0, 0, 30)
+			opt.Size             = UDim2.new(1, 0, 0, 28)
 			opt.BackgroundColor3 = T.SURFACE2
 			opt.Text             = ""
 			opt.Parent           = dropFrame
 
 			local optLbl: TextLabel = Instance.new("TextLabel")
-			optLbl.Size               = UDim2.new(1, -16, 1, -4)
-			optLbl.Position           = UDim2.new(0, 10, 0, 2)
+			optLbl.Size               = UDim2.new(1, -14, 1, -4)
+			optLbl.Position           = UDim2.new(0, 8, 0, 2)
 			optLbl.BackgroundTransparency = 1
 			optLbl.Text               = v
 			optLbl.Font               = Enum.Font.GothamBold
@@ -855,7 +854,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			optLbl.ZIndex             = opt.ZIndex + 1
 			optLbl.Parent             = opt
 			local odsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", optLbl)
-			odsc.MaxTextSize = 13
+			odsc.MaxTextSize = 12
 
 			opt.MouseEnter:Connect(function()   twFast(opt, { BackgroundColor3 = T.BORDER }) end)
 			opt.MouseLeave:Connect(function()   twFast(opt, { BackgroundColor3 = T.SURFACE2 }) end)
@@ -876,7 +875,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		dropBtn.MouseButton1Click:Connect(function()
 			open          = not open
 			arrowLbl.Text = open and "▴" or "▾"
-			local h       = open and (#options * 30 + 6) or 0
+			local h       = open and (#options * 28 + 4) or 0
 			twMed(dropFrame, { Size = UDim2.new(1, 0, 0, h) })
 			task.delay(0.24, updateCanvas)
 		end)
@@ -891,26 +890,24 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	-- ── FOLDER ─────────────────────────────────────────────────────────────────
 	function Win:CreateFolder(folderName: string, folderIcon: string?)
 		local tabBtn: TextButton = Instance.new("TextButton")
-		tabBtn.Size             = UDim2.new(1, 0, 0, 32)
+		tabBtn.Size             = UDim2.new(1, 0, 0, 30)
 		tabBtn.BackgroundColor3 = T.SURFACE2
 		tabBtn.Text             = ""
 		tabBtn.LayoutOrder      = nxt()
 		tabBtn.Parent           = scroll
 		_style(tabBtn)
 
-		-- Optional icon
-		local fTextOffL = 12
+		local fTextOffL = 10
 		local ficId = _icon(folderIcon)
 		if ficId then
-			local ico = _makeIcon(tabBtn, ficId, 14, T.TEXT_DIM)
-			ico.Position = UDim2.new(0, 10, 0.5, -7)
+			local ico = _makeIcon(tabBtn, ficId, 12, T.TEXT_DIM)
+			ico.Position = UDim2.new(0, 8, 0.5, -6)
 			ico.ZIndex   = tabBtn.ZIndex + 1
-			fTextOffL    = 28
+			fTextOffL    = 24
 		end
 
-		-- Arrow + name label
 		local tabLbl: TextLabel = Instance.new("TextLabel")
-		tabLbl.Size               = UDim2.new(1, -(fTextOffL + 8), 1, -4)
+		tabLbl.Size               = UDim2.new(1, -(fTextOffL + 6), 1, -4)
 		tabLbl.Position           = UDim2.new(0, fTextOffL, 0, 2)
 		tabLbl.BackgroundTransparency = 1
 		tabLbl.Text               = "▶  " .. (folderName or "Folder")
@@ -921,10 +918,9 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		tabLbl.ZIndex             = tabBtn.ZIndex + 1
 		tabLbl.Parent             = tabBtn
 		local ftsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", tabLbl)
-		ftsc.MinTextSize = 8
-		ftsc.MaxTextSize = 13
+		ftsc.MinTextSize = 7
+		ftsc.MaxTextSize = 12
 
-		-- Content container
 		local content: Frame = Instance.new("Frame")
 		content.Size                   = UDim2.new(1, 0, 0, 0)
 		content.BackgroundColor3       = T.BG
@@ -935,15 +931,15 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		_corner(content, 5)
 
 		local cLayout: UIListLayout = Instance.new("UIListLayout")
-		cLayout.Padding   = UDim.new(0, 4)
+		cLayout.Padding   = UDim.new(0, 3)
 		cLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		cLayout.Parent    = content
 
 		local cPad: UIPadding = Instance.new("UIPadding")
-		cPad.PaddingLeft   = UDim.new(0, 6)
+		cPad.PaddingLeft   = UDim.new(0, 4)
 		cPad.PaddingRight  = UDim.new(0, 0)
-		cPad.PaddingTop    = UDim.new(0, 4)
-		cPad.PaddingBottom = UDim.new(0, 4)
+		cPad.PaddingTop    = UDim.new(0, 3)
+		cPad.PaddingBottom = UDim.new(0, 3)
 		cPad.Parent        = content
 
 		local fBar: Frame = Instance.new("Frame")
@@ -957,7 +953,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local function updateFolder()
 			task.defer(function()
 				if folderOpen then
-					local h = cLayout.AbsoluteContentSize.Y + 8
+					local h = cLayout.AbsoluteContentSize.Y + 6
 					twMed(content, { Size = UDim2.new(1, 0, 0, h) })
 				else
 					for _, obj in ipairs(content:GetDescendants()) do
@@ -987,7 +983,6 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			updateFolder()
 		end)
 
-		-- Folder children
 		local Folder = {}
 		local _fOrder = 0
 		local function fnxt() _fOrder += 1; return _fOrder end
@@ -997,24 +992,24 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		-- Folder:Button
 		function Folder:Button(text: string, callback: () -> (), icon: string?)
 			local btn: TextButton = Instance.new("TextButton")
-			btn.Size             = UDim2.new(1, 0, 0, 34)
+			btn.Size             = UDim2.new(1, 0, 0, 32)
 			btn.BackgroundColor3 = T.SURFACE
 			btn.Text             = ""
 			btn.LayoutOrder      = fnxt()
 			btn.Parent           = content
 			_fStyle(btn)
 
-			local tOffL = 10
+			local tOffL = 8
 			local bid = _icon(icon)
 			if bid then
-				local ico = _makeIcon(btn, bid, 14, T.ACCENT)
-				ico.Position = UDim2.new(0, 8, 0.5, -7)
+				local ico = _makeIcon(btn, bid, 12, T.ACCENT)
+				ico.Position = UDim2.new(0, 6, 0.5, -6)
 				ico.ZIndex   = btn.ZIndex + 1
-				tOffL        = 26
+				tOffL        = 22
 			end
 
 			local lblF: Frame = Instance.new("Frame")
-			lblF.Size                  = UDim2.new(1, -(tOffL + 24), 1, -6)
+			lblF.Size                  = UDim2.new(1, -(tOffL + 22), 1, -6)
 			lblF.Position              = UDim2.new(0, tOffL, 0, 3)
 			lblF.BackgroundTransparency = 1
 			lblF.ZIndex                = btn.ZIndex + 1
@@ -1031,10 +1026,11 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			lbl.ZIndex                = btn.ZIndex + 1
 			lbl.Parent                = lblF
 			local fbsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
-			fbsc.MinTextSize = 8; fbsc.MaxTextSize = 13
+			fbsc.MinTextSize = 7
+			fbsc.MaxTextSize = 12
 
 			local arr: TextLabel = Instance.new("TextLabel")
-			arr.Size               = UDim2.new(0, 16, 1, 0)
+			arr.Size               = UDim2.new(0, 14, 1, 0)
 			arr.AnchorPoint        = Vector2.new(1, 0.5)
 			arr.Position           = UDim2.new(1, -4, 0.5, 0)
 			arr.BackgroundTransparency = 1
@@ -1045,7 +1041,8 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			arr.ZIndex             = btn.ZIndex + 1
 			arr.Parent             = btn
 			local fasc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", arr)
-			fasc.MinTextSize = 8; fasc.MaxTextSize = 18
+			fasc.MinTextSize = 7
+			fasc.MaxTextSize = 16
 
 			btn.MouseEnter:Connect(function()      twFast(btn, { BackgroundColor3 = T.SURFACE2 }) end)
 			btn.MouseLeave:Connect(function()      twFast(btn, { BackgroundColor3 = T.SURFACE })  end)
@@ -1063,24 +1060,24 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		function Folder:Toggle(text: string, default: boolean, callback: (boolean) -> (), icon: string?)
 			local state = default or false
 			local row: TextButton = Instance.new("TextButton")
-			row.Size             = UDim2.new(1, 0, 0, 34)
+			row.Size             = UDim2.new(1, 0, 0, 32)
 			row.BackgroundColor3 = T.SURFACE
 			row.Text             = ""
 			row.LayoutOrder      = fnxt()
 			row.Parent           = content
 			_fStyle(row)
 
-			local tOffL = 10
+			local tOffL = 8
 			local tid = _icon(icon)
 			if tid then
-				local ico = _makeIcon(row, tid, 14, T.TEXT_DIM)
-				ico.Position = UDim2.new(0, 8, 0.5, -7)
+				local ico = _makeIcon(row, tid, 12, T.TEXT_DIM)
+				ico.Position = UDim2.new(0, 6, 0.5, -6)
 				ico.ZIndex   = row.ZIndex + 1
-				tOffL        = 26
+				tOffL        = 22
 			end
 
 			local lblF: Frame = Instance.new("Frame")
-			lblF.Size                  = UDim2.new(1, -(tOffL + 48), 1, -6)
+			lblF.Size                  = UDim2.new(1, -(tOffL + 44), 1, -6)
 			lblF.Position              = UDim2.new(0, tOffL, 0, 3)
 			lblF.BackgroundTransparency = 1
 			lblF.ZIndex                = row.ZIndex + 1
@@ -1097,29 +1094,30 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			lbl.ZIndex                = row.ZIndex + 1
 			lbl.Parent                = lblF
 			local ftsc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
-			ftsc2.MinTextSize = 8; ftsc2.MaxTextSize = 13
+			ftsc2.MinTextSize = 7
+			ftsc2.MaxTextSize = 12
 
 			local pill: Frame = Instance.new("Frame")
-			pill.Size             = UDim2.new(0, 34, 0, 18)
+			pill.Size             = UDim2.new(0, 30, 0, 16)
 			pill.AnchorPoint      = Vector2.new(1, 0.5)
-			pill.Position         = UDim2.new(1, -10, 0.5, 0)
+			pill.Position         = UDim2.new(1, -8, 0.5, 0)
 			pill.BackgroundColor3 = state and T.ACCENT or T.SURFACE2
 			pill.ZIndex           = row.ZIndex + 1
 			pill.Parent           = row
-			_corner(pill, 9)
+			_corner(pill, 8)
 
 			local knob: Frame = Instance.new("Frame")
-			knob.Size             = UDim2.new(0, 12, 0, 12)
+			knob.Size             = UDim2.new(0, 10, 0, 10)
 			knob.AnchorPoint      = Vector2.new(0.5, 0.5)
-			knob.Position         = state and UDim2.new(1, -9, 0.5, 0) or UDim2.new(0, 9, 0.5, 0)
+			knob.Position         = state and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0)
 			knob.BackgroundColor3 = T.TEXT
 			knob.ZIndex           = row.ZIndex + 2
 			knob.Parent           = pill
-			_corner(knob, 6)
+			_corner(knob, 5)
 
 			local function applyState()
 				twMed(pill, { BackgroundColor3 = state and T.ACCENT or T.SURFACE2 })
-				twMed(knob, { Position = state and UDim2.new(1, -9, 0.5, 0) or UDim2.new(0, 9, 0.5, 0) })
+				twMed(knob, { Position = state and UDim2.new(1, -8, 0.5, 0) or UDim2.new(0, 8, 0.5, 0) })
 			end
 
 			row.MouseEnter:Connect(function()    twFast(row, { BackgroundColor3 = T.SURFACE2 }) end)
@@ -1135,21 +1133,21 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			return Tv
 		end
 
-		-- Folder:Slider (same as Win:Slider, compact height)
+		-- Folder:Slider
 		function Folder:Slider(text: string, min: number, max: number, default: number, callback: (number) -> ())
 			min = min or 0; max = max or 100
 			local val = math.clamp(default or min, min, max)
 
 			local cont: Frame = Instance.new("Frame")
-			cont.Size             = UDim2.new(1, 0, 0, 62)
+			cont.Size             = UDim2.new(1, 0, 0, 56)
 			cont.BackgroundColor3 = T.SURFACE
 			cont.LayoutOrder      = fnxt()
 			cont.Parent           = content
 			_fStyle(cont)
 
 			local lblF: Frame = Instance.new("Frame")
-			lblF.Size                  = UDim2.new(0.6, -10, 0, 20)
-			lblF.Position              = UDim2.new(0, 10, 0, 6)
+			lblF.Size                  = UDim2.new(0.6, -8, 0, 18)
+			lblF.Position              = UDim2.new(0, 8, 0, 5)
 			lblF.BackgroundTransparency = 1
 			lblF.Parent                = cont
 
@@ -1163,12 +1161,13 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			tLbl.TextXAlignment        = Enum.TextXAlignment.Left
 			tLbl.Parent                = lblF
 			local slsc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", tLbl)
-			slsc2.MinTextSize = 8; slsc2.MaxTextSize = 13
+			slsc2.MinTextSize = 7
+			slsc2.MaxTextSize = 12
 
 			local numBox: Frame = Instance.new("Frame")
-			numBox.Size             = UDim2.new(0, 38, 0, 20)
+			numBox.Size             = UDim2.new(0, 34, 0, 18)
 			numBox.AnchorPoint      = Vector2.new(1, 0)
-			numBox.Position         = UDim2.new(1, -8, 0, 6)
+			numBox.Position         = UDim2.new(1, -8, 0, 5)
 			numBox.BackgroundColor3 = T.SURFACE2
 			numBox.BorderSizePixel  = 0
 			numBox.Parent           = cont
@@ -1187,11 +1186,12 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			valTxt.TextYAlignment     = Enum.TextYAlignment.Center
 			valTxt.Parent             = numBox
 			local fvtsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", valTxt)
-			fvtsc.MinTextSize = 7; fvtsc.MaxTextSize = 12
+			fvtsc.MinTextSize = 7
+			fvtsc.MaxTextSize = 11
 
 			local bar: Frame = Instance.new("Frame")
-			bar.Size             = UDim2.new(1, -18, 0, 5)
-			bar.Position         = UDim2.new(0, 9, 0, 44)
+			bar.Size             = UDim2.new(1, -16, 0, 4)
+			bar.Position         = UDim2.new(0, 8, 0, 40)
 			bar.BackgroundColor3 = T.SURFACE2
 			bar.Parent           = cont
 			_corner(bar, 3)
@@ -1204,13 +1204,13 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			_corner(fill, 3)
 
 			local knob: Frame = Instance.new("Frame")
-			knob.Size             = UDim2.new(0, 12, 0, 12)
+			knob.Size             = UDim2.new(0, 10, 0, 10)
 			knob.AnchorPoint      = Vector2.new(0.5, 0.5)
 			knob.Position         = UDim2.new(ip, 0, 0.5, 0)
 			knob.BackgroundColor3 = T.TEXT
 			knob.ZIndex           = bar.ZIndex + 1
 			knob.Parent           = bar
-			_corner(knob, 6)
+			_corner(knob, 5)
 			_stroke(knob, T.ACCENT, 2)
 
 			local sliderDrag = false
@@ -1239,25 +1239,25 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local open     = false
 
 			local dropBtn: TextButton = Instance.new("TextButton")
-			dropBtn.Size             = UDim2.new(1, 0, 0, 44)
+			dropBtn.Size             = UDim2.new(1, 0, 0, 40)
 			dropBtn.BackgroundColor3 = T.SURFACE
 			dropBtn.Text             = ""
 			dropBtn.LayoutOrder      = fnxt()
 			dropBtn.Parent           = content
 			_fStyle(dropBtn)
 
-			local tOffL = 10
+			local tOffL = 8
 			local fdid  = _icon(icon)
 			if fdid then
-				local ico = _makeIcon(dropBtn, fdid, 14, T.ACCENT)
-				ico.Position = UDim2.new(0, 8, 0.5, -7)
+				local ico = _makeIcon(dropBtn, fdid, 12, T.ACCENT)
+				ico.Position = UDim2.new(0, 6, 0.5, -6)
 				ico.ZIndex   = dropBtn.ZIndex + 1
-				tOffL        = 26
+				tOffL        = 22
 			end
 
 			local headLbl: TextLabel = Instance.new("TextLabel")
-			headLbl.Size               = UDim2.new(1, -(tOffL + 22), 0, 14)
-			headLbl.Position           = UDim2.new(0, tOffL, 0, 4)
+			headLbl.Size               = UDim2.new(1, -(tOffL + 20), 0, 12)
+			headLbl.Position           = UDim2.new(0, tOffL, 0, 3)
 			headLbl.BackgroundTransparency = 1
 			headLbl.Text               = headerText or "Dropdown"
 			headLbl.TextColor3         = T.TEXT_DIM
@@ -1267,11 +1267,11 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			headLbl.ZIndex             = dropBtn.ZIndex + 1
 			headLbl.Parent             = dropBtn
 			local fhdsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", headLbl)
-			fhdsc.MaxTextSize = 11
+			fhdsc.MaxTextSize = 10
 
 			local selLbl: TextLabel = Instance.new("TextLabel")
-			selLbl.Size               = UDim2.new(1, -(tOffL + 22), 0, 18)
-			selLbl.Position           = UDim2.new(0, tOffL, 0, 18)
+			selLbl.Size               = UDim2.new(1, -(tOffL + 20), 0, 16)
+			selLbl.Position           = UDim2.new(0, tOffL, 0, 15)
 			selLbl.BackgroundTransparency = 1
 			selLbl.Text               = selected
 			selLbl.TextColor3         = T.TEXT
@@ -1281,10 +1281,10 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			selLbl.ZIndex             = dropBtn.ZIndex + 1
 			selLbl.Parent             = dropBtn
 			local fsdsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", selLbl)
-			fsdsc.MaxTextSize = 13
+			fsdsc.MaxTextSize = 12
 
 			local arrowLbl: TextLabel = Instance.new("TextLabel")
-			arrowLbl.Size               = UDim2.new(0, 18, 1, 0)
+			arrowLbl.Size               = UDim2.new(0, 16, 1, 0)
 			arrowLbl.AnchorPoint        = Vector2.new(1, 0.5)
 			arrowLbl.Position           = UDim2.new(1, -4, 0.5, 0)
 			arrowLbl.BackgroundTransparency = 1
@@ -1295,7 +1295,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			arrowLbl.ZIndex             = dropBtn.ZIndex + 1
 			arrowLbl.Parent             = dropBtn
 			local fadsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", arrowLbl)
-			fadsc.MaxTextSize = 16
+			fadsc.MaxTextSize = 14
 
 			local dropFrame: Frame = Instance.new("Frame")
 			dropFrame.Size             = UDim2.new(1, 0, 0, 0)
@@ -1303,21 +1303,22 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			dropFrame.ClipsDescendants = true
 			dropFrame.LayoutOrder      = fnxt()
 			dropFrame.Parent           = content
-			_corner(dropFrame, 5); _stroke(dropFrame)
+			_corner(dropFrame, 5)
+			_stroke(dropFrame)
 
 			local dfL = Instance.new("UIListLayout", dropFrame); dfL.SortOrder = Enum.SortOrder.LayoutOrder
 			local dfP = Instance.new("UIPadding", dropFrame); dfP.PaddingTop = UDim.new(0,2); dfP.PaddingBottom = UDim.new(0,2)
 
 			for _, v in ipairs(options or {}) do
 				local opt: TextButton = Instance.new("TextButton")
-				opt.Size             = UDim2.new(1, 0, 0, 28)
+				opt.Size             = UDim2.new(1, 0, 0, 26)
 				opt.BackgroundColor3 = T.SURFACE2
 				opt.Text             = ""
 				opt.Parent           = dropFrame
 
 				local optLbl: TextLabel = Instance.new("TextLabel")
-				optLbl.Size               = UDim2.new(1, -16, 1, -4)
-				optLbl.Position           = UDim2.new(0, 8, 0, 2)
+				optLbl.Size               = UDim2.new(1, -14, 1, -4)
+				optLbl.Position           = UDim2.new(0, 6, 0, 2)
 				optLbl.BackgroundTransparency = 1
 				optLbl.Text               = v
 				optLbl.Font               = Enum.Font.GothamBold
@@ -1327,7 +1328,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 				optLbl.ZIndex             = opt.ZIndex + 1
 				optLbl.Parent             = opt
 				local fodsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", optLbl)
-				fodsc.MaxTextSize = 12
+				fodsc.MaxTextSize = 11
 
 				opt.MouseEnter:Connect(function()   twFast(opt, { BackgroundColor3 = T.BORDER }) end)
 				opt.MouseLeave:Connect(function()   twFast(opt, { BackgroundColor3 = T.SURFACE2 }) end)
@@ -1343,7 +1344,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			dropBtn.MouseLeave:Connect(function()   twFast(dropBtn, { BackgroundColor3 = T.SURFACE })  end)
 			dropBtn.MouseButton1Click:Connect(function()
 				open = not open; arrowLbl.Text = open and "▴" or "▾"
-				local h = open and (#options * 28 + 4) or 0
+				local h = open and (#options * 26 + 4) or 0
 				twMed(dropFrame, { Size = UDim2.new(1, 0, 0, h) })
 				task.delay(0.24, function() updateFolder(); updateCanvas() end)
 			end)
