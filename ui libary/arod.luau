@@ -336,22 +336,10 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		if i.UserInputType == Enum.UserInputType.MouseMovement
 			or i.UserInputType == Enum.UserInputType.Touch
 		then
-			local sc    = workspace.CurrentCamera.ViewportSize
 			local delta = i.Position - dragStart
-			local newX  = math.clamp(startPos.X.Offset + delta.X, 0, math.max(0, sc.X - frame.AbsoluteSize.X))
-			local newY  = math.clamp(startPos.Y.Offset + delta.Y, 0, math.max(0, sc.Y - frame.AbsoluteSize.Y))
+			local newX = startPos.X.Offset + delta.X
+			local newY = startPos.Y.Offset + delta.Y
 			frame.Position = UDim2.new(0, newX, 0, newY)
-		end
-	end)
-
-	RunService.RenderStepped:Connect(function()
-		if not frame or not frame.Parent then return end
-		local sc  = workspace.CurrentCamera.ViewportSize
-		local pos = frame.Position
-		local x   = math.clamp(pos.X.Offset, 0, math.max(0, sc.X - frame.AbsoluteSize.X))
-		local y   = math.clamp(pos.Y.Offset, 0, math.max(0, sc.Y - frame.AbsoluteSize.Y))
-		if x ~= pos.X.Offset or y ~= pos.Y.Offset then
-			frame.Position = UDim2.new(0, x, 0, y)
 		end
 	end)
 
