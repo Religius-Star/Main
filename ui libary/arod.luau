@@ -1,10 +1,9 @@
 --!nocheck
-local cloneref = cloneref or function(x) return x end
 local gethui   = gethui   or function() return game:GetService("CoreGui") end
-local TweenService: TweenService = cloneref(game:GetService("TweenService"))
-local UIS: UserInputService      = cloneref(game:GetService("UserInputService"))
-local Players: Players           = cloneref(game:GetService("Players"))
-local RunService: RunService     = cloneref(game:GetService("RunService"))
+local TweenService: TweenService = game:GetService("TweenService")
+local UIS: UserInputService      = game:GetService("UserInputService")
+local Players: Players           = game:GetService("Players")
+local RunService: RunService     = game:GetService("RunService")
 local player: Player             = Players.LocalPlayer
 
 local existingGui = player:WaitForChild("PlayerGui"):FindFirstChild("455HubGui") or gethui():FindFirstChild("455HubGui")
