@@ -30,10 +30,12 @@ Lib.__index = Lib
 -- ─── ICON SYSTEM ──────────────────────────────────────────────────────────────
 local Icons: {[string]: string} = {}
 local ICON_URL = "https://raw.githubusercontent.com/Religius-Star/Main/refs/heads/main/config/icon.json"
+local ICON_RETRIES = 3
 
-local function _loadIcons()
+local function _loadIcons(retryCount)
+	retryCount = retryCount or 0
 	local ok, result = pcall(function()
-		local raw = HttpService:GetAsync(ICON_URL)  -- removed second param to avoid cache policy issues
+		local raw = HttpService:GetAsync(ICON_URL)  -- no cache param
 		local fn = loadstring(raw)
 		if fn then
 			local data = fn()
@@ -45,9 +47,20 @@ local function _loadIcons()
 	end)
 	if ok and result then
 		Icons = result
+		return true
 	else
-		-- silent fallback: Icons stays empty, elements just show no icon
-		warn("[455Hub] Icon load failed, icons disabled:", result)
+		if retryCount < ICON_RETRIES then
+			task.wait(1)
+			return _loadIcons(retryCount + 1)
+		else
+			warn("[455Hub] Icon load failed after retries, icons disabled.")
+			-- Fallback: create a simple square icon for testing (optional)
+			-- You can comment out if you prefer no icon at all.
+			Icons = {
+				["lucide-fallback"] = "rbxassetid://0"  -- will show nothing
+			}
+			return false
+		end
 	end
 end
 _loadIcons()
@@ -157,14 +170,15 @@ local function _makeLabel(parent: Instance, props: {[string]: any}): TextLabel
 	return lbl
 end
 
--- Icon ImageLabel helper
+-- Icon ImageLabel helper – now with better fallback
 local function _makeIcon(parent: Instance, iconId: string, size: number?, color: Color3?): ImageLabel
 	local img: ImageLabel = Instance.new("ImageLabel")
 	img.Size                  = UDim2.new(0, size or 16, 0, size or 16)
 	img.BackgroundTransparency = 1
-	img.Image                 = iconId
+	img.Image                 = iconId or ""  -- if nil, it's empty
 	img.ImageColor3           = color or T.TEXT_DIM
 	img.ScaleType             = Enum.ScaleType.Fit
+	img.ZIndex                = (parent.ZIndex or 0) + 2  -- ensure on top
 	img.Parent                = parent
 	return img
 end
@@ -450,6 +464,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	end
 
 	-- ── BUTTON ─────────────────────────────────────────────────────────────────
+	-- Usage: Win:Button("Click me", function() print("clicked") end, "settings")
 	function Win:Button(text: string, callback: () -> (), icon: string?)
 		local btn: TextButton = Instance.new("TextButton")
 		btn.Size             = UDim2.new(1, 0, 0, 38)
