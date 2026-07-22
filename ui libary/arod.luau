@@ -384,37 +384,33 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 	function Win:Section(text: string)
 		local sec: Frame = Instance.new("Frame")
-		sec.Size                  = UDim2.new(1, 0, 0, 20)
-		sec.BackgroundTransparency = 1
-		sec.LayoutOrder           = nxt()
-		sec.Parent                = scroll
+		sec.Size                   = UDim2.new(1, 0, 0, 24)
+		sec.BackgroundColor3       = T.SURFACE2
+		sec.BackgroundTransparency = 0
+		sec.LayoutOrder            = nxt()
+		sec.Parent                 = scroll
+		_corner(sec, 5)
 
-		local bar: Frame = Instance.new("Frame")
-		bar.Size             = UDim2.new(0, 3, 0.6, 0)
-		bar.Position         = UDim2.new(0, 0, 0.2, 0)
-		bar.BackgroundColor3 = T.ACCENT
-		bar.BorderSizePixel  = 0
-		bar.Parent           = sec
-		_corner(bar, 2)
-
-		local line: Frame = Instance.new("Frame")
-		line.Size             = UDim2.new(1, -8, 0, 1)
-		line.Position         = UDim2.new(0, 8, 0.5, 0)
-		line.BackgroundColor3 = T.BORDER
-		line.BorderSizePixel  = 0
-		line.Parent           = sec
+		local accentBar: Frame = Instance.new("Frame")
+		accentBar.Size             = UDim2.new(0, 3, 0.7, 0)
+		accentBar.Position         = UDim2.new(0, 0, 0.15, 0)
+		accentBar.BackgroundColor3 = T.ACCENT
+		accentBar.BorderSizePixel  = 0
+		accentBar.Parent           = sec
+		_corner(accentBar, 2)
 
 		local sLbl: TextLabel = Instance.new("TextLabel")
-		sLbl.Size                  = UDim2.new(0.76, 0, 1, 0)
+		sLbl.Size                  = UDim2.new(1, -16, 1, 0)
 		sLbl.Position              = UDim2.new(0, 10, 0, 0)
-		sLbl.BackgroundColor3      = T.BG
-		sLbl.Text                  = text or ""
-		sLbl.TextColor3            = T.TEXT_DIM
-		sLbl.Font                  = Enum.Font.GothamBold
+		sLbl.BackgroundTransparency = 1
+		sLbl.Text                  = string.upper(text or "")
+		sLbl.TextColor3            = T.ACCENT
+		sLbl.Font                  = Enum.Font.GothamBlack
 		sLbl.TextScaled            = true
 		sLbl.TextXAlignment        = Enum.TextXAlignment.Left
 		sLbl.Parent                = sec
 		local sc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", sLbl)
+		sc2.MinTextSize = 7
 		sc2.MaxTextSize = 10
 
 		updateCanvas()
@@ -696,9 +692,36 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		return S
 	end
 
-	function Win:Dropdown(headerText: string, options: {string}, callback: (string) -> (), icon: string?)
-		local selected = "Select..."
-		local open     = false
+	-- Dropdown signature (backward compat):
+	-- single: Win:Dropdown(header, options, callback, icon?)
+	-- multi:  Win:Dropdown(header, options, callback, icon?, true, maxPick?)
+	-- multi arg4 can also be skipped: Win:Dropdown(header, options, callback, nil, true, 3)
+	function Win:Dropdown(headerText: string, options: {string}, callback: any, icon: any, multi: boolean?, maxPick: number?)
+		-- backward compat: if icon is boolean, treat as multi flag (no icon provided)
+		local _icon2 = icon
+		local _multi = multi
+		local _max   = maxPick
+		if type(icon) == "boolean" then
+			_multi = icon
+			_max   = multi :: any
+			_icon2 = nil
+		end
+		_multi = _multi == true
+		_max   = type(_max) == "number" and _max or (#options)
+
+		local selected: string         = "Select..."
+		local selectedSet: {[string]: boolean} = {}
+		local selectedList: {string}   = {}
+		local open = false
+
+		local function buildLabel(): string
+			if not _multi then
+				return selected
+			end
+			if #selectedList == 0 then return "Select..." end
+			if #selectedList <= 2 then return table.concat(selectedList, ", ") end
+			return selectedList[1] .. ", +" .. (#selectedList - 1)
+		end
 
 		local dropBtn: TextButton = Instance.new("TextButton")
 		dropBtn.Size             = UDim2.new(1, 0, 0, 44)
@@ -709,7 +732,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		_style(dropBtn)
 
 		local textOffsetL = 10
-		local iconId = _icon(icon)
+		local iconId = _icon(_icon2)
 		if iconId then
 			local ico = _makeIcon(dropBtn, iconId, 14, T.ACCENT)
 			ico.Position = UDim2.new(0, 8, 0.5, -7)
@@ -717,8 +740,30 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			textOffsetL  = 28
 		end
 
+		-- multi badge: shows "2/3" when multi mode
+		local badgeLbl: TextLabel?
+		if _multi then
+			local badge: TextLabel = Instance.new("TextLabel")
+			badge.Size               = UDim2.new(0, 28, 0, 14)
+			badge.AnchorPoint        = Vector2.new(1, 0)
+			badge.Position           = UDim2.new(1, -28, 0, 4)
+			badge.BackgroundColor3   = T.ACCENT_DIM
+			badge.Text               = "0/" .. _max
+			badge.Font               = Enum.Font.GothamBold
+			badge.TextScaled         = true
+			badge.TextColor3         = T.ACCENT
+			badge.TextXAlignment     = Enum.TextXAlignment.Center
+			badge.ZIndex             = dropBtn.ZIndex + 2
+			badge.Parent             = dropBtn
+			_corner(badge, 4)
+			local bsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", badge)
+			bsc.MinTextSize = 6
+			bsc.MaxTextSize = 9
+			badgeLbl = badge
+		end
+
 		local headLbl: TextLabel = Instance.new("TextLabel")
-		headLbl.Size               = UDim2.new(1, -(textOffsetL + 24), 0, 14)
+		headLbl.Size               = UDim2.new(1, -(textOffsetL + (_multi and 34 or 24)), 0, 14)
 		headLbl.Position           = UDim2.new(0, textOffsetL, 0, 3)
 		headLbl.BackgroundTransparency = 1
 		headLbl.Text               = headerText or "Dropdown"
@@ -732,10 +777,10 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		hdsc.MaxTextSize = 10
 
 		local selLbl: TextLabel = Instance.new("TextLabel")
-		selLbl.Size               = UDim2.new(1, -(textOffsetL + 24), 0, 18)
+		selLbl.Size               = UDim2.new(1, -(textOffsetL + (_multi and 34 or 24)), 0, 18)
 		selLbl.Position           = UDim2.new(0, textOffsetL, 0, 17)
 		selLbl.BackgroundTransparency = 1
-		selLbl.Text               = selected
+		selLbl.Text               = "Select..."
 		selLbl.TextColor3         = T.TEXT
 		selLbl.Font               = Enum.Font.GothamBold
 		selLbl.TextScaled         = true
@@ -775,15 +820,19 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		dPad.PaddingTop    = UDim.new(0, 2)
 		dPad.PaddingBottom = UDim.new(0, 2)
 
+		-- option rows
+		local optFrames: {[string]: Frame} = {}
+
 		for _, v in ipairs(options or {}) do
 			local opt: TextButton = Instance.new("TextButton")
 			opt.Size             = UDim2.new(1, 0, 0, 28)
 			opt.BackgroundColor3 = T.SURFACE2
 			opt.Text             = ""
 			opt.Parent           = dropFrame
+			optFrames[v]         = opt
 
 			local optLbl: TextLabel = Instance.new("TextLabel")
-			optLbl.Size               = UDim2.new(1, -14, 1, -4)
+			optLbl.Size               = UDim2.new(1, _multi and -28 or -14, 1, -4)
 			optLbl.Position           = UDim2.new(0, 8, 0, 2)
 			optLbl.BackgroundTransparency = 1
 			optLbl.Text               = v
@@ -796,17 +845,79 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local odsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", optLbl)
 			odsc.MaxTextSize = 12
 
-			opt.MouseEnter:Connect(function()   twFast(opt, { BackgroundColor3 = T.BORDER }) end)
-			opt.MouseLeave:Connect(function()   twFast(opt, { BackgroundColor3 = T.SURFACE2 }) end)
+			-- multi: pill checkbox on right
+			local checkDot: Frame?
+			if _multi then
+				local dot: Frame = Instance.new("Frame")
+				dot.Size             = UDim2.new(0, 12, 0, 12)
+				dot.AnchorPoint      = Vector2.new(1, 0.5)
+				dot.Position         = UDim2.new(1, -8, 0.5, 0)
+				dot.BackgroundColor3 = T.BORDER
+				dot.ZIndex           = opt.ZIndex + 2
+				dot.Parent           = opt
+				_corner(dot, 3)
+				checkDot = dot
+			end
+
+			local function refreshOpt()
+				if not _multi then return end
+				local on = selectedSet[v] == true
+				twFast(opt, { BackgroundColor3 = on and T.SURFACE or T.SURFACE2 })
+				if checkDot then
+					twFast(checkDot, { BackgroundColor3 = on and T.ACCENT or T.BORDER })
+				end
+				optLbl.TextColor3 = on and T.TEXT or T.TEXT_DIM
+			end
+
+			opt.MouseEnter:Connect(function()
+				if not (selectedSet[v] and _multi) then
+					twFast(opt, { BackgroundColor3 = T.BORDER })
+				end
+			end)
+			opt.MouseLeave:Connect(function()
+				if _multi then refreshOpt()
+				else twFast(opt, { BackgroundColor3 = T.SURFACE2 }) end
+			end)
+
 			opt.MouseButton1Click:Connect(function()
-				selected      = v
-				selLbl.Text   = v
-				open          = false
-				arrowLbl.Text = "▾"
-				twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
-				task.wait(0.23)
-				updateCanvas()
-				if callback then pcall(callback, v) end
+				if not _multi then
+					-- single mode: original behavior
+					selected      = v
+					selLbl.Text   = v
+					open          = false
+					arrowLbl.Text = "▾"
+					twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
+					task.wait(0.23)
+					updateCanvas()
+					if callback then pcall(callback, v) end
+				else
+					-- multi mode
+					if selectedSet[v] then
+						selectedSet[v] = nil
+						for i, sv in ipairs(selectedList) do
+							if sv == v then table.remove(selectedList, i); break end
+						end
+					else
+						if #selectedList >= _max then
+							-- max reached: flash badge red briefly
+							if badgeLbl then
+								twFast(badgeLbl, { TextColor3 = Color3.fromRGB(255, 80, 80) })
+								task.delay(0.4, function()
+									twFast(badgeLbl, { TextColor3 = T.ACCENT })
+								end)
+							end
+							return
+						end
+						selectedSet[v] = true
+						table.insert(selectedList, v)
+					end
+					refreshOpt()
+					selLbl.Text = buildLabel()
+					if badgeLbl then
+						badgeLbl.Text = #selectedList .. "/" .. _max
+					end
+					if callback then pcall(callback, selectedList) end
+				end
 			end)
 		end
 
@@ -822,9 +933,302 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 		updateCanvas()
 		local D = {}
-		function D:Get() return selected end
-		function D:Set(v: string) selected = v; selLbl.Text = v end
+		-- Get: single returns string, multi returns {string}
+		function D:Get() return _multi and selectedList or selected end
+		-- Set: single pass string, multi pass {string}
+		function D:Set(v: any)
+			if not _multi then
+				selected = v; selLbl.Text = v
+			else
+				selectedSet = {}; selectedList = {}
+				for _, item in ipairs(v) do
+					selectedSet[item] = true
+					table.insert(selectedList, item)
+				end
+				selLbl.Text = buildLabel()
+				if badgeLbl then badgeLbl.Text = #selectedList .. "/" .. _max end
+				for item, frame in pairs(optFrames) do
+					local on = selectedSet[item] == true
+					frame.BackgroundColor3 = on and T.SURFACE or T.SURFACE2
+					local dot = frame:FindFirstChildOfClass("Frame")
+					if dot then dot.BackgroundColor3 = on and T.ACCENT or T.BORDER end
+					local lbl = frame:FindFirstChildOfClass("TextLabel")
+					if lbl then lbl.TextColor3 = on and T.TEXT or T.TEXT_DIM end
+				end
+			end
+		end
+		function D:Clear()
+			if _multi then
+				selectedSet = {}; selectedList = {}
+				selLbl.Text = "Select..."
+				if badgeLbl then badgeLbl.Text = "0/" .. _max end
+				for _, frame in pairs(optFrames) do
+					frame.BackgroundColor3 = T.SURFACE2
+					local dot = frame:FindFirstChildOfClass("Frame")
+					if dot then dot.BackgroundColor3 = T.BORDER end
+					local lbl = frame:FindFirstChildOfClass("TextLabel")
+					if lbl then lbl.TextColor3 = T.TEXT_DIM end
+				end
+			else
+				selected = "Select..."; selLbl.Text = selected
+			end
+		end
 		return D
+	end
+
+	function Win:TextBox(labelText: string, default: string, placeholder: string, callback: (string) -> (), icon: string?)
+		local currentVal: string = default or ""
+
+		local cont: Frame = Instance.new("Frame")
+		cont.Size             = UDim2.new(1, 0, 0, 54)
+		cont.BackgroundColor3 = T.SURFACE
+		cont.LayoutOrder      = nxt()
+		cont.Parent           = scroll
+		_style(cont)
+
+		local textOffsetL = 10
+		local iconId = _icon(icon)
+		if iconId then
+			local ico = _makeIcon(cont, iconId, 14, T.ACCENT)
+			ico.Position = UDim2.new(0, 8, 0, 7)
+			ico.ZIndex   = cont.ZIndex + 1
+			textOffsetL  = 28
+		end
+
+		local headerLbl: TextLabel = Instance.new("TextLabel")
+		headerLbl.Size               = UDim2.new(1, -(textOffsetL + 8), 0, 16)
+		headerLbl.Position           = UDim2.new(0, textOffsetL, 0, 5)
+		headerLbl.BackgroundTransparency = 1
+		headerLbl.Text               = labelText or "Input"
+		headerLbl.Font               = Enum.Font.GothamBold
+		headerLbl.TextScaled         = true
+		headerLbl.TextColor3         = T.TEXT
+		headerLbl.TextXAlignment     = Enum.TextXAlignment.Left
+		headerLbl.ZIndex             = cont.ZIndex + 1
+		headerLbl.Parent             = cont
+		local htsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", headerLbl)
+		htsc.MinTextSize = 8
+		htsc.MaxTextSize = 12
+
+		local inputBg: Frame = Instance.new("Frame")
+		inputBg.Size             = UDim2.new(1, -16, 0, 22)
+		inputBg.Position         = UDim2.new(0, 8, 0, 26)
+		inputBg.BackgroundColor3 = T.BG
+		inputBg.ZIndex           = cont.ZIndex + 1
+		inputBg.Parent           = cont
+		_corner(inputBg, 4)
+		_stroke(inputBg, T.BORDER, 1)
+
+		local clearBtn: TextButton = Instance.new("TextButton")
+		clearBtn.Size               = UDim2.new(0, 18, 0, 18)
+		clearBtn.AnchorPoint        = Vector2.new(1, 0.5)
+		clearBtn.Position           = UDim2.new(1, -2, 0.5, 0)
+		clearBtn.BackgroundTransparency = 1
+		clearBtn.Text               = ""
+		clearBtn.ZIndex             = cont.ZIndex + 3
+		clearBtn.Parent             = inputBg
+		local _cxId = _icon("x")
+		local _cxImg: ImageLabel
+		if _cxId then
+			_cxImg = _makeIcon(clearBtn, _cxId, 10, T.TEXT_DIM)
+			_cxImg.AnchorPoint = Vector2.new(0.5, 0.5)
+			_cxImg.Position    = UDim2.new(0.5, 0, 0.5, 0)
+			_cxImg.ZIndex      = clearBtn.ZIndex + 1
+		else
+			clearBtn.Text       = "✕"
+			clearBtn.Font       = Enum.Font.GothamBold
+			clearBtn.TextScaled = true
+			clearBtn.TextColor3 = T.TEXT_DIM
+			local csc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", clearBtn)
+			csc.MinTextSize = 7
+			csc.MaxTextSize = 10
+		end
+
+		local tb: TextBox = Instance.new("TextBox")
+		tb.Size               = UDim2.new(1, -24, 1, -4)
+		tb.Position           = UDim2.new(0, 6, 0, 2)
+		tb.BackgroundTransparency = 1
+		tb.Text               = currentVal
+		tb.PlaceholderText    = placeholder or "Type here..."
+		tb.PlaceholderColor3  = T.TEXT_DIM
+		tb.Font               = Enum.Font.Gotham
+		tb.TextScaled         = true
+		tb.TextColor3         = T.TEXT
+		tb.ClearTextOnFocus   = false
+		tb.TextXAlignment     = Enum.TextXAlignment.Left
+		tb.ZIndex             = cont.ZIndex + 2
+		tb.Parent             = inputBg
+		local tbsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", tb)
+		tbsc.MinTextSize = 8
+		tbsc.MaxTextSize = 11
+
+		tb.Focused:Connect(function()
+			twFast(inputBg, { BackgroundColor3 = T.SURFACE2 })
+			local s = inputBg:FindFirstChildOfClass("UIStroke")
+			if s then s.Color = T.ACCENT end
+		end)
+		tb.FocusLost:Connect(function()
+			twFast(inputBg, { BackgroundColor3 = T.BG })
+			local s = inputBg:FindFirstChildOfClass("UIStroke")
+			if s then s.Color = T.BORDER end
+			currentVal = tb.Text
+			if callback then pcall(callback, currentVal) end
+		end)
+
+		clearBtn.MouseButton1Click:Connect(function()
+			tb.Text    = ""
+			currentVal = ""
+			if callback then pcall(callback, "") end
+		end)
+		clearBtn.MouseEnter:Connect(function()
+			if _cxImg then twFast(_cxImg, { ImageColor3 = T.ACCENT }) else clearBtn.TextColor3 = T.ACCENT end
+		end)
+		clearBtn.MouseLeave:Connect(function()
+			if _cxImg then twFast(_cxImg, { ImageColor3 = T.TEXT_DIM }) else clearBtn.TextColor3 = T.TEXT_DIM end
+		end)
+
+		updateCanvas()
+		local TB = {}
+		function TB:Get(): string return currentVal end
+		function TB:Set(v: string) currentVal = v; tb.Text = v end
+		return TB
+	end
+
+	function Win:Keybind(labelText: string, default: Enum.KeyCode?, callback: (Enum.KeyCode?) -> (), icon: string?)
+		local boundKey: Enum.KeyCode? = default
+		local listening: boolean      = false
+		local conn: RBXScriptConnection?
+
+		local cont: Frame = Instance.new("Frame")
+		cont.Size             = UDim2.new(1, 0, 0, 34)
+		cont.BackgroundColor3 = T.SURFACE
+		cont.LayoutOrder      = nxt()
+		cont.Parent           = scroll
+		_style(cont)
+
+		local textOffsetL = 10
+		local iconId = _icon(icon)
+		if iconId then
+			local ico = _makeIcon(cont, iconId, 14, T.TEXT_DIM)
+			ico.Position = UDim2.new(0, 8, 0.5, -7)
+			ico.ZIndex   = cont.ZIndex + 1
+			textOffsetL  = 28
+		end
+
+		local lblFrame: Frame = Instance.new("Frame")
+		lblFrame.Size                  = UDim2.new(1, -(textOffsetL + 78), 1, -6)
+		lblFrame.Position              = UDim2.new(0, textOffsetL, 0, 3)
+		lblFrame.BackgroundTransparency = 1
+		lblFrame.ZIndex                = cont.ZIndex + 1
+		lblFrame.Parent                = cont
+
+		local lbl: TextLabel = Instance.new("TextLabel")
+		lbl.Size                  = UDim2.new(1, 0, 1, 0)
+		lbl.BackgroundTransparency = 1
+		lbl.Text                  = labelText or "Keybind"
+		lbl.Font                  = Enum.Font.GothamBold
+		lbl.TextScaled            = true
+		lbl.TextColor3            = T.TEXT
+		lbl.TextXAlignment        = Enum.TextXAlignment.Left
+		lbl.ZIndex                = cont.ZIndex + 1
+		lbl.Parent                = lblFrame
+		local ksc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
+		ksc.MinTextSize = 8
+		ksc.MaxTextSize = 12
+
+		local keyBtn: TextButton = Instance.new("TextButton")
+		keyBtn.Size               = UDim2.new(0, 44, 0, 22)
+		keyBtn.AnchorPoint        = Vector2.new(1, 0.5)
+		keyBtn.Position           = UDim2.new(1, -30, 0.5, 0)
+		keyBtn.BackgroundColor3   = T.SURFACE2
+		keyBtn.Text               = boundKey and boundKey.Name or "NONE"
+		keyBtn.Font               = Enum.Font.GothamBold
+		keyBtn.TextScaled         = true
+		keyBtn.TextColor3         = T.ACCENT
+		keyBtn.ZIndex             = cont.ZIndex + 2
+		keyBtn.Parent             = cont
+		_corner(keyBtn, 4)
+		_stroke(keyBtn, T.BORDER, 1)
+		local kbsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", keyBtn)
+		kbsc.MinTextSize = 7
+		kbsc.MaxTextSize = 10
+
+		local clrBtn: TextButton = Instance.new("TextButton")
+		clrBtn.Size               = UDim2.new(0, 22, 0, 22)
+		clrBtn.AnchorPoint        = Vector2.new(1, 0.5)
+		clrBtn.Position           = UDim2.new(1, -4, 0.5, 0)
+		clrBtn.BackgroundColor3   = T.SURFACE2
+		clrBtn.Text               = ""
+		clrBtn.ZIndex             = cont.ZIndex + 2
+		clrBtn.Parent             = cont
+		_corner(clrBtn, 4)
+		_stroke(clrBtn, T.BORDER, 1)
+		local _kxId = _icon("x")
+		local _kxImg: ImageLabel
+		if _kxId then
+			_kxImg = _makeIcon(clrBtn, _kxId, 11, T.TEXT_DIM)
+			_kxImg.AnchorPoint = Vector2.new(0.5, 0.5)
+			_kxImg.Position    = UDim2.new(0.5, 0, 0.5, 0)
+			_kxImg.ZIndex      = clrBtn.ZIndex + 1
+		else
+			clrBtn.Text       = "✕"
+			clrBtn.Font       = Enum.Font.GothamBold
+			clrBtn.TextScaled = true
+			clrBtn.TextColor3 = T.TEXT_DIM
+			local csc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", clrBtn)
+			csc2.MinTextSize = 7
+			csc2.MaxTextSize = 10
+		end
+
+		local function stopListening()
+			listening       = false
+			keyBtn.Text     = boundKey and boundKey.Name or "NONE"
+			keyBtn.TextColor3 = T.ACCENT
+			local s = keyBtn:FindFirstChildOfClass("UIStroke")
+			if s then s.Color = T.BORDER end
+			if conn then conn:Disconnect(); conn = nil end
+		end
+
+		keyBtn.MouseButton1Click:Connect(function()
+			if listening then stopListening(); return end
+			listening       = true
+			keyBtn.Text     = "..."
+			keyBtn.TextColor3 = T.TEXT_DIM
+			local s = keyBtn:FindFirstChildOfClass("UIStroke")
+			if s then s.Color = T.ACCENT end
+
+			conn = UIS.InputBegan:Connect(function(input: InputObject, gpe: boolean)
+				if gpe then return end
+				if input.UserInputType == Enum.UserInputType.Keyboard then
+					boundKey = input.KeyCode
+					if callback then pcall(callback, boundKey) end
+					stopListening()
+				end
+			end)
+		end)
+
+		clrBtn.MouseButton1Click:Connect(function()
+			boundKey = nil
+			stopListening()
+			if callback then pcall(callback, nil) end
+		end)
+
+		keyBtn.MouseEnter:Connect(function() twFast(keyBtn, { BackgroundColor3 = T.BORDER }) end)
+		keyBtn.MouseLeave:Connect(function() twFast(keyBtn, { BackgroundColor3 = T.SURFACE2 }) end)
+		clrBtn.MouseEnter:Connect(function()
+			twFast(clrBtn, { BackgroundColor3 = T.ACCENT })
+			if _kxImg then twFast(_kxImg, { ImageColor3 = T.TEXT }) else clrBtn.TextColor3 = T.TEXT end
+		end)
+		clrBtn.MouseLeave:Connect(function()
+			twFast(clrBtn, { BackgroundColor3 = T.SURFACE2 })
+			if _kxImg then twFast(_kxImg, { ImageColor3 = T.TEXT_DIM }) else clrBtn.TextColor3 = T.TEXT_DIM end
+		end)
+
+		updateCanvas()
+		local K = {}
+		function K:Get(): Enum.KeyCode? return boundKey end
+		function K:Set(v: Enum.KeyCode?) boundKey = v; keyBtn.Text = v and v.Name or "NONE" end
+		return K
 	end
 
 	function Win:CreateFolder(folderName: string, folderIcon: string?)
