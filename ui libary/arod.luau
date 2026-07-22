@@ -790,20 +790,48 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local sdsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", selLbl)
 		sdsc.MaxTextSize = 13
 
-		local arrowLbl: TextLabel = Instance.new("TextLabel")
-		arrowLbl.Size               = UDim2.new(0, 18, 1, 0)
-		arrowLbl.AnchorPoint        = Vector2.new(1, 0.5)
-		arrowLbl.Position           = UDim2.new(1, -6, 0.5, 0)
-		arrowLbl.BackgroundTransparency = 1
-		arrowLbl.Text               = "▾"
-		arrowLbl.TextColor3         = T.ACCENT
-		arrowLbl.Font               = Enum.Font.GothamBold
-		arrowLbl.TextScaled         = true
-		arrowLbl.TextXAlignment     = Enum.TextXAlignment.Center
-		arrowLbl.ZIndex             = dropBtn.ZIndex + 1
-		arrowLbl.Parent             = dropBtn
-		local adsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", arrowLbl)
-		adsc.MaxTextSize = 16
+		local _chevDownId = _icon("chevron-down")
+		local _chevUpId   = _icon("chevron-up")
+		local arrowImg: ImageLabel?
+		local arrowLbl: TextLabel?
+
+		if _chevDownId then
+			local img: ImageLabel = Instance.new("ImageLabel")
+			img.Size                  = UDim2.new(0, 14, 0, 14)
+			img.AnchorPoint           = Vector2.new(1, 0.5)
+			img.Position              = UDim2.new(1, -6, 0.5, 0)
+			img.BackgroundTransparency = 1
+			img.Image                 = _chevDownId
+			img.ImageColor3           = T.ACCENT
+			img.ScaleType             = Enum.ScaleType.Fit
+			img.ZIndex                = dropBtn.ZIndex + 1
+			img.Parent                = dropBtn
+			arrowImg = img
+		else
+			local lbl: TextLabel = Instance.new("TextLabel")
+			lbl.Size               = UDim2.new(0, 18, 1, 0)
+			lbl.AnchorPoint        = Vector2.new(1, 0.5)
+			lbl.Position           = UDim2.new(1, -6, 0.5, 0)
+			lbl.BackgroundTransparency = 1
+			lbl.Text               = "▾"
+			lbl.TextColor3         = T.ACCENT
+			lbl.Font               = Enum.Font.GothamBold
+			lbl.TextScaled         = true
+			lbl.TextXAlignment     = Enum.TextXAlignment.Center
+			lbl.ZIndex             = dropBtn.ZIndex + 1
+			lbl.Parent             = dropBtn
+			local adsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
+			adsc.MaxTextSize = 16
+			arrowLbl = lbl
+		end
+
+		local function setArrow(isOpen: boolean)
+			if arrowImg then
+				arrowImg.Image = isOpen and (_chevUpId or _chevDownId) or _chevDownId
+			elseif arrowLbl then
+				arrowLbl.Text = isOpen and "▴" or "▾"
+			end
+		end
 
 		local dropFrame: Frame = Instance.new("Frame")
 		dropFrame.Size             = UDim2.new(1, 0, 0, 0)
@@ -882,10 +910,10 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			opt.MouseButton1Click:Connect(function()
 				if not _multi then
 					-- single mode: original behavior
-					selected      = v
-					selLbl.Text   = v
-					open          = false
-					arrowLbl.Text = "▾"
+					selected    = v
+					selLbl.Text = v
+					open        = false
+					setArrow(false)
 					twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
 					task.wait(0.23)
 					updateCanvas()
@@ -924,9 +952,9 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		dropBtn.MouseEnter:Connect(function()   twFast(dropBtn, { BackgroundColor3 = T.SURFACE2 }) end)
 		dropBtn.MouseLeave:Connect(function()   twFast(dropBtn, { BackgroundColor3 = T.SURFACE })  end)
 		dropBtn.MouseButton1Click:Connect(function()
-			open          = not open
-			arrowLbl.Text = open and "▴" or "▾"
-			local h       = open and (#options * 28 + 4) or 0
+			open = not open
+			setArrow(open)
+			local h = open and (#options * 28 + 4) or 0
 			twMed(dropFrame, { Size = UDim2.new(1, 0, 0, h) })
 			task.delay(0.24, updateCanvas)
 		end)
@@ -1622,19 +1650,47 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local fsdsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", selLbl)
 			fsdsc.MaxTextSize = 12
 
-			local arrowLbl: TextLabel = Instance.new("TextLabel")
-			arrowLbl.Size               = UDim2.new(0, 16, 1, 0)
-			arrowLbl.AnchorPoint        = Vector2.new(1, 0.5)
-			arrowLbl.Position           = UDim2.new(1, -4, 0.5, 0)
-			arrowLbl.BackgroundTransparency = 1
-			arrowLbl.Text               = "▾"
-			arrowLbl.TextColor3         = T.ACCENT
-			arrowLbl.Font               = Enum.Font.GothamBold
-			arrowLbl.TextScaled         = true
-			arrowLbl.ZIndex             = dropBtn.ZIndex + 1
-			arrowLbl.Parent             = dropBtn
-			local fadsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", arrowLbl)
-			fadsc.MaxTextSize = 14
+			local _fChevDownId = _icon("chevron-down")
+			local _fChevUpId   = _icon("chevron-up")
+			local fArrowImg: ImageLabel?
+			local arrowLbl: TextLabel?
+
+			if _fChevDownId then
+				local img: ImageLabel = Instance.new("ImageLabel")
+				img.Size                  = UDim2.new(0, 12, 0, 12)
+				img.AnchorPoint           = Vector2.new(1, 0.5)
+				img.Position              = UDim2.new(1, -5, 0.5, 0)
+				img.BackgroundTransparency = 1
+				img.Image                 = _fChevDownId
+				img.ImageColor3           = T.ACCENT
+				img.ScaleType             = Enum.ScaleType.Fit
+				img.ZIndex                = dropBtn.ZIndex + 1
+				img.Parent                = dropBtn
+				fArrowImg = img
+			else
+				local lbl: TextLabel = Instance.new("TextLabel")
+				lbl.Size               = UDim2.new(0, 16, 1, 0)
+				lbl.AnchorPoint        = Vector2.new(1, 0.5)
+				lbl.Position           = UDim2.new(1, -4, 0.5, 0)
+				lbl.BackgroundTransparency = 1
+				lbl.Text               = "▾"
+				lbl.TextColor3         = T.ACCENT
+				lbl.Font               = Enum.Font.GothamBold
+				lbl.TextScaled         = true
+				lbl.ZIndex             = dropBtn.ZIndex + 1
+				lbl.Parent             = dropBtn
+				local fadsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
+				fadsc.MaxTextSize = 14
+				arrowLbl = lbl
+			end
+
+			local function setFArrow(isOpen: boolean)
+				if fArrowImg then
+					fArrowImg.Image = isOpen and (_fChevUpId or _fChevDownId) or _fChevDownId
+				elseif arrowLbl then
+					arrowLbl.Text = isOpen and "▴" or "▾"
+				end
+			end
 
 			local dropFrame: Frame = Instance.new("Frame")
 			dropFrame.Size             = UDim2.new(1, 0, 0, 0)
@@ -1672,7 +1728,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 				opt.MouseEnter:Connect(function()   twFast(opt, { BackgroundColor3 = T.BORDER }) end)
 				opt.MouseLeave:Connect(function()   twFast(opt, { BackgroundColor3 = T.SURFACE2 }) end)
 				opt.MouseButton1Click:Connect(function()
-					selected = v; selLbl.Text = v; open = false; arrowLbl.Text = "▾"
+					selected = v; selLbl.Text = v; open = false; setFArrow(false)
 					twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
 					task.wait(0.23); updateFolder(); updateCanvas()
 					if callback then pcall(callback, v) end
@@ -1682,7 +1738,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			dropBtn.MouseEnter:Connect(function()   twFast(dropBtn, { BackgroundColor3 = T.SURFACE2 }) end)
 			dropBtn.MouseLeave:Connect(function()   twFast(dropBtn, { BackgroundColor3 = T.SURFACE })  end)
 			dropBtn.MouseButton1Click:Connect(function()
-				open = not open; arrowLbl.Text = open and "▴" or "▾"
+				open = not open; setFArrow(open)
 				local h = open and (#options * 26 + 4) or 0
 				twMed(dropFrame, { Size = UDim2.new(1, 0, 0, h) })
 				task.delay(0.24, function() updateFolder(); updateCanvas() end)
