@@ -1601,6 +1601,299 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			return S
 		end
 
+		function Folder:Label(text: string)
+			local lbl: TextLabel = Instance.new("TextLabel")
+			lbl.Size                  = UDim2.new(1, 0, 0, 20)
+			lbl.BackgroundTransparency = 1
+			lbl.Text                  = text or "Label"
+			lbl.Font                  = Enum.Font.GothamMedium
+			lbl.TextScaled            = true
+			lbl.TextColor3            = T.TEXT_DIM
+			lbl.TextXAlignment        = Enum.TextXAlignment.Center
+			lbl.LayoutOrder           = fnxt()
+			lbl.Parent                = content
+			local sc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
+			sc.MaxTextSize = 11
+			updateCanvas()
+			return lbl
+		end
+
+		function Folder:Section(text: string)
+			local sec: Frame = Instance.new("Frame")
+			sec.Size                   = UDim2.new(1, 0, 0, 22)
+			sec.BackgroundColor3       = T.SURFACE2
+			sec.BackgroundTransparency = 0
+			sec.LayoutOrder            = fnxt()
+			sec.Parent                 = content
+			_corner(sec, 5)
+
+			local accentBar: Frame = Instance.new("Frame")
+			accentBar.Size             = UDim2.new(0, 3, 0.7, 0)
+			accentBar.Position         = UDim2.new(0, 0, 0.15, 0)
+			accentBar.BackgroundColor3 = T.ACCENT
+			accentBar.BorderSizePixel  = 0
+			accentBar.Parent           = sec
+			_corner(accentBar, 2)
+
+			local sLbl: TextLabel = Instance.new("TextLabel")
+			sLbl.Size                  = UDim2.new(1, -16, 1, 0)
+			sLbl.Position              = UDim2.new(0, 10, 0, 0)
+			sLbl.BackgroundTransparency = 1
+			sLbl.Text                  = string.upper(text or "")
+			sLbl.TextColor3            = T.ACCENT
+			sLbl.Font                  = Enum.Font.GothamBlack
+			sLbl.TextScaled            = true
+			sLbl.TextXAlignment        = Enum.TextXAlignment.Left
+			sLbl.Parent                = sec
+			local sc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", sLbl)
+			sc2.MinTextSize = 6
+			sc2.MaxTextSize = 9
+			updateCanvas()
+		end
+
+		function Folder:TextBox(labelText: string, default: string, placeholder: string, callback: (string) -> (), icon: string?)
+			local currentVal: string = default or ""
+
+			local cont2: Frame = Instance.new("Frame")
+			cont2.Size             = UDim2.new(1, 0, 0, 50)
+			cont2.BackgroundColor3 = T.SURFACE
+			cont2.LayoutOrder      = fnxt()
+			cont2.Parent           = content
+			_fStyle(cont2)
+
+			local tOffL = 8
+			local iconId2 = _icon(icon)
+			if iconId2 then
+				local ico = _makeIcon(cont2, iconId2, 12, T.ACCENT)
+				ico.Position = UDim2.new(0, 6, 0, 6)
+				ico.ZIndex   = cont2.ZIndex + 1
+				tOffL        = 22
+			end
+
+			local headerLbl2: TextLabel = Instance.new("TextLabel")
+			headerLbl2.Size               = UDim2.new(1, -(tOffL + 8), 0, 14)
+			headerLbl2.Position           = UDim2.new(0, tOffL, 0, 4)
+			headerLbl2.BackgroundTransparency = 1
+			headerLbl2.Text               = labelText or "Input"
+			headerLbl2.Font               = Enum.Font.GothamBold
+			headerLbl2.TextScaled         = true
+			headerLbl2.TextColor3         = T.TEXT
+			headerLbl2.TextXAlignment     = Enum.TextXAlignment.Left
+			headerLbl2.ZIndex             = cont2.ZIndex + 1
+			headerLbl2.Parent             = cont2
+			local htsc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", headerLbl2)
+			htsc2.MinTextSize = 7
+			htsc2.MaxTextSize = 11
+
+			local inputBg2: Frame = Instance.new("Frame")
+			inputBg2.Size             = UDim2.new(1, -14, 0, 20)
+			inputBg2.Position         = UDim2.new(0, 7, 0, 24)
+			inputBg2.BackgroundColor3 = T.BG
+			inputBg2.ZIndex           = cont2.ZIndex + 1
+			inputBg2.Parent           = cont2
+			_corner(inputBg2, 4)
+			_stroke(inputBg2, T.BORDER, 1)
+
+			local clearBtn2: TextButton = Instance.new("TextButton")
+			clearBtn2.Size               = UDim2.new(0, 16, 0, 16)
+			clearBtn2.AnchorPoint        = Vector2.new(1, 0.5)
+			clearBtn2.Position           = UDim2.new(1, -2, 0.5, 0)
+			clearBtn2.BackgroundTransparency = 1
+			clearBtn2.Text               = ""
+			clearBtn2.ZIndex             = cont2.ZIndex + 3
+			clearBtn2.Parent             = inputBg2
+			local _cxId2 = _icon("x")
+			local _cxImg2: ImageLabel
+			if _cxId2 then
+				_cxImg2 = _makeIcon(clearBtn2, _cxId2, 9, T.TEXT_DIM)
+				_cxImg2.AnchorPoint = Vector2.new(0.5, 0.5)
+				_cxImg2.Position    = UDim2.new(0.5, 0, 0.5, 0)
+				_cxImg2.ZIndex      = clearBtn2.ZIndex + 1
+			else
+				clearBtn2.Text       = "✕"
+				clearBtn2.Font       = Enum.Font.GothamBold
+				clearBtn2.TextScaled = true
+				clearBtn2.TextColor3 = T.TEXT_DIM
+			end
+
+			local tb2: TextBox = Instance.new("TextBox")
+			tb2.Size               = UDim2.new(1, -22, 1, -4)
+			tb2.Position           = UDim2.new(0, 5, 0, 2)
+			tb2.BackgroundTransparency = 1
+			tb2.Text               = currentVal
+			tb2.PlaceholderText    = placeholder or "Type here..."
+			tb2.PlaceholderColor3  = T.TEXT_DIM
+			tb2.Font               = Enum.Font.Gotham
+			tb2.TextScaled         = true
+			tb2.TextColor3         = T.TEXT
+			tb2.ClearTextOnFocus   = false
+			tb2.TextXAlignment     = Enum.TextXAlignment.Left
+			tb2.ZIndex             = cont2.ZIndex + 2
+			tb2.Parent             = inputBg2
+			local tbsc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", tb2)
+			tbsc2.MinTextSize = 7
+			tbsc2.MaxTextSize = 10
+
+			tb2.Focused:Connect(function()
+				twFast(inputBg2, { BackgroundColor3 = T.SURFACE2 })
+				local s = inputBg2:FindFirstChildOfClass("UIStroke")
+				if s then s.Color = T.ACCENT end
+			end)
+			tb2.FocusLost:Connect(function()
+				twFast(inputBg2, { BackgroundColor3 = T.BG })
+				local s = inputBg2:FindFirstChildOfClass("UIStroke")
+				if s then s.Color = T.BORDER end
+				currentVal = tb2.Text
+				if callback then pcall(callback, currentVal) end
+			end)
+			clearBtn2.MouseButton1Click:Connect(function()
+				tb2.Text = ""; currentVal = ""
+				if callback then pcall(callback, "") end
+			end)
+			clearBtn2.MouseEnter:Connect(function()
+				if _cxImg2 then twFast(_cxImg2, { ImageColor3 = T.ACCENT }) else clearBtn2.TextColor3 = T.ACCENT end
+			end)
+			clearBtn2.MouseLeave:Connect(function()
+				if _cxImg2 then twFast(_cxImg2, { ImageColor3 = T.TEXT_DIM }) else clearBtn2.TextColor3 = T.TEXT_DIM end
+			end)
+
+			updateCanvas()
+			local TB2 = {}
+			function TB2:Get(): string return currentVal end
+			function TB2:Set(v: string) currentVal = v; tb2.Text = v end
+			return TB2
+		end
+
+		function Folder:Keybind(labelText: string, default: Enum.KeyCode?, callback: (Enum.KeyCode?) -> (), icon: string?)
+			local boundKey: Enum.KeyCode? = default
+			local listening: boolean      = false
+			local conn2: RBXScriptConnection?
+
+			local cont2: Frame = Instance.new("Frame")
+			cont2.Size             = UDim2.new(1, 0, 0, 32)
+			cont2.BackgroundColor3 = T.SURFACE
+			cont2.LayoutOrder      = fnxt()
+			cont2.Parent           = content
+			_fStyle(cont2)
+
+			local tOffL = 8
+			local iconId2 = _icon(icon)
+			if iconId2 then
+				local ico = _makeIcon(cont2, iconId2, 12, T.TEXT_DIM)
+				ico.Position = UDim2.new(0, 6, 0.5, -6)
+				ico.ZIndex   = cont2.ZIndex + 1
+				tOffL        = 22
+			end
+
+			local lblF2: Frame = Instance.new("Frame")
+			lblF2.Size                  = UDim2.new(1, -(tOffL + 74), 1, -6)
+			lblF2.Position              = UDim2.new(0, tOffL, 0, 3)
+			lblF2.BackgroundTransparency = 1
+			lblF2.ZIndex                = cont2.ZIndex + 1
+			lblF2.Parent                = cont2
+
+			local lbl2: TextLabel = Instance.new("TextLabel")
+			lbl2.Size                  = UDim2.new(1, 0, 1, 0)
+			lbl2.BackgroundTransparency = 1
+			lbl2.Text                  = labelText or "Keybind"
+			lbl2.Font                  = Enum.Font.GothamBold
+			lbl2.TextScaled            = true
+			lbl2.TextColor3            = T.TEXT
+			lbl2.TextXAlignment        = Enum.TextXAlignment.Left
+			lbl2.ZIndex                = cont2.ZIndex + 1
+			lbl2.Parent                = lblF2
+			local ksc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl2)
+			ksc2.MinTextSize = 7
+			ksc2.MaxTextSize = 11
+
+			local keyBtn2: TextButton = Instance.new("TextButton")
+			keyBtn2.Size               = UDim2.new(0, 40, 0, 20)
+			keyBtn2.AnchorPoint        = Vector2.new(1, 0.5)
+			keyBtn2.Position           = UDim2.new(1, -28, 0.5, 0)
+			keyBtn2.BackgroundColor3   = T.SURFACE2
+			keyBtn2.Text               = boundKey and boundKey.Name or "NONE"
+			keyBtn2.Font               = Enum.Font.GothamBold
+			keyBtn2.TextScaled         = true
+			keyBtn2.TextColor3         = T.ACCENT
+			keyBtn2.ZIndex             = cont2.ZIndex + 2
+			keyBtn2.Parent             = cont2
+			_corner(keyBtn2, 4)
+			_stroke(keyBtn2, T.BORDER, 1)
+			local kbsc2: UITextSizeConstraint = Instance.new("UITextSizeConstraint", keyBtn2)
+			kbsc2.MinTextSize = 6
+			kbsc2.MaxTextSize = 9
+
+			local clrBtn2: TextButton = Instance.new("TextButton")
+			clrBtn2.Size               = UDim2.new(0, 20, 0, 20)
+			clrBtn2.AnchorPoint        = Vector2.new(1, 0.5)
+			clrBtn2.Position           = UDim2.new(1, -4, 0.5, 0)
+			clrBtn2.BackgroundColor3   = T.SURFACE2
+			clrBtn2.Text               = ""
+			clrBtn2.ZIndex             = cont2.ZIndex + 2
+			clrBtn2.Parent             = cont2
+			_corner(clrBtn2, 4)
+			_stroke(clrBtn2, T.BORDER, 1)
+			local _kxId2 = _icon("x")
+			local _kxImg2: ImageLabel
+			if _kxId2 then
+				_kxImg2 = _makeIcon(clrBtn2, _kxId2, 10, T.TEXT_DIM)
+				_kxImg2.AnchorPoint = Vector2.new(0.5, 0.5)
+				_kxImg2.Position    = UDim2.new(0.5, 0, 0.5, 0)
+				_kxImg2.ZIndex      = clrBtn2.ZIndex + 1
+			else
+				clrBtn2.Text       = "✕"
+				clrBtn2.Font       = Enum.Font.GothamBold
+				clrBtn2.TextScaled = true
+				clrBtn2.TextColor3 = T.TEXT_DIM
+			end
+
+			local function stopListening2()
+				listening       = false
+				keyBtn2.Text    = boundKey and boundKey.Name or "NONE"
+				keyBtn2.TextColor3 = T.ACCENT
+				local s = keyBtn2:FindFirstChildOfClass("UIStroke")
+				if s then s.Color = T.BORDER end
+				if conn2 then conn2:Disconnect(); conn2 = nil end
+			end
+
+			keyBtn2.MouseButton1Click:Connect(function()
+				if listening then stopListening2(); return end
+				listening = true
+				keyBtn2.Text = "..."
+				keyBtn2.TextColor3 = T.TEXT_DIM
+				local s = keyBtn2:FindFirstChildOfClass("UIStroke")
+				if s then s.Color = T.ACCENT end
+				conn2 = UIS.InputBegan:Connect(function(input: InputObject, gpe: boolean)
+					if gpe then return end
+					if input.UserInputType == Enum.UserInputType.Keyboard then
+						boundKey = input.KeyCode
+						if callback then pcall(callback, boundKey) end
+						stopListening2()
+					end
+				end)
+			end)
+			clrBtn2.MouseButton1Click:Connect(function()
+				boundKey = nil; stopListening2()
+				if callback then pcall(callback, nil) end
+			end)
+			keyBtn2.MouseEnter:Connect(function() twFast(keyBtn2, { BackgroundColor3 = T.BORDER }) end)
+			keyBtn2.MouseLeave:Connect(function() twFast(keyBtn2, { BackgroundColor3 = T.SURFACE2 }) end)
+			clrBtn2.MouseEnter:Connect(function()
+				twFast(clrBtn2, { BackgroundColor3 = T.ACCENT })
+				if _kxImg2 then twFast(_kxImg2, { ImageColor3 = T.TEXT }) else clrBtn2.TextColor3 = T.TEXT end
+			end)
+			clrBtn2.MouseLeave:Connect(function()
+				twFast(clrBtn2, { BackgroundColor3 = T.SURFACE2 })
+				if _kxImg2 then twFast(_kxImg2, { ImageColor3 = T.TEXT_DIM }) else clrBtn2.TextColor3 = T.TEXT_DIM end
+			end)
+
+			updateCanvas()
+			local K2 = {}
+			function K2:Get(): Enum.KeyCode? return boundKey end
+			function K2:Set(v: Enum.KeyCode?) boundKey = v; keyBtn2.Text = v and v.Name or "NONE" end
+			return K2
+		end
+
 		function Folder:Dropdown(headerText: string, options: {string}, callback: (string) -> (), icon: string?)
 			local selected = "Select..."
 			local open     = false
@@ -1756,6 +2049,145 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 	updateCanvas()
 	return Win
+end
+
+-- ============================================================
+-- CONFIG SYSTEM  (Rayfield-style)
+-- Usage:
+--   local Cfg = Lib:CreateConfig("MyScript")
+--   Cfg:Register("ToggleName",  toggleRef,  false)
+--   Cfg:Register("SliderName",  sliderRef,  50)
+--   Cfg:Register("KeybindName", keybindRef, Enum.KeyCode.F)
+--   Cfg:Load()   -- call after all elements are registered
+--   Cfg:Save()   -- call whenever you want to persist
+-- ============================================================
+function Lib:CreateConfig(configName: string)
+	local CFG_FOLDER = "455Hub_Configs"
+	local CFG_FILE   = CFG_FOLDER .. "/" .. (configName or "default") .. ".json"
+
+	-- { key = { ref, defaultValue } }
+	local _entries: {[string]: {ref: any, default: any}} = {}
+
+	local function _canUseFiles(): boolean
+		return (writefile ~= nil) and (readfile ~= nil) and (isfile ~= nil) and (isfolder ~= nil) and (makefolder ~= nil)
+	end
+
+	local function _serialize(val: any): any
+		local t = typeof(val)
+		if t == "boolean" or t == "number" or t == "string" then
+			return val
+		elseif t == "EnumItem" then
+			return { __type = "KeyCode", name = val.Name }
+		elseif t == "table" then
+			-- multi-dropdown returns {string}
+			return val
+		end
+		return nil
+	end
+
+	local function _deserialize(raw: any): any
+		if type(raw) == "table" and raw.__type == "KeyCode" then
+			local ok, kc = pcall(function()
+				return (Enum.KeyCode :: any)[raw.name]
+			end)
+			return ok and kc or nil
+		end
+		return raw
+	end
+
+	local Config = {}
+
+	-- Register an element reference + its default value
+	function Config:Register(key: string, ref: any, default: any)
+		_entries[key] = { ref = ref, default = default }
+	end
+
+	-- Save current values to file
+	function Config:Save()
+		if not _canUseFiles() then return end
+		local data: {[string]: any} = {}
+		for key, entry in pairs(_entries) do
+			local ref = entry.ref
+			if ref and ref.Get then
+				local ok, val = pcall(function() return ref:Get() end)
+				if ok then
+					data[key] = _serialize(val)
+				end
+			end
+		end
+		local ok2, err2 = pcall(function()
+			if not isfolder(CFG_FOLDER) then makefolder(CFG_FOLDER) end
+			local encoded = game:GetService("HttpService"):JSONEncode(data)
+			writefile(CFG_FILE, encoded)
+		end)
+		if not ok2 then
+			warn("[455Hub Config] Save failed:", err2)
+		end
+	end
+
+	-- Load values from file and apply to registered refs
+	function Config:Load()
+		if not _canUseFiles() then
+			-- fallback: apply defaults only
+			for _, entry in pairs(_entries) do
+				if entry.ref and entry.ref.Set and entry.default ~= nil then
+					pcall(function() entry.ref:Set(entry.default) end)
+				end
+			end
+			return
+		end
+
+		local data: {[string]: any} = {}
+		local ok, err = pcall(function()
+			if isfile(CFG_FILE) then
+				local raw = readfile(CFG_FILE)
+				data = game:GetService("HttpService"):JSONDecode(raw)
+			end
+		end)
+		if not ok then
+			warn("[455Hub Config] Load failed:", err)
+		end
+
+		for key, entry in pairs(_entries) do
+			local ref = entry.ref
+			if ref and ref.Set then
+				local val = data[key]
+				if val ~= nil then
+					pcall(function() ref:Set(_deserialize(val)) end)
+				elseif entry.default ~= nil then
+					pcall(function() ref:Set(entry.default) end)
+				end
+			end
+		end
+	end
+
+	-- Reset all to defaults and delete saved file
+	function Config:Reset()
+		for _, entry in pairs(_entries) do
+			if entry.ref and entry.ref.Set and entry.default ~= nil then
+				pcall(function() entry.ref:Set(entry.default) end)
+			end
+		end
+		if _canUseFiles() then
+			pcall(function()
+				if isfile(CFG_FILE) then
+					-- writefile with empty then discard — some executors lack delfile
+					pcall(function() delfile(CFG_FILE) end)
+				end
+			end)
+		end
+	end
+
+	-- Auto-save helper: wrap a callback to save after it fires
+	function Config:AutoSave(ref: any, key: string, default: any, callback: any)
+		self:Register(key, ref, default)
+		return function(val: any)
+			if callback then pcall(callback, val) end
+			task.defer(function() self:Save() end)
+		end
+	end
+
+	return Config
 end
 
 function Lib:Start()
