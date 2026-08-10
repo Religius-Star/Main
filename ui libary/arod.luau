@@ -2053,23 +2053,38 @@ end
 
 -- ============================================================
 -- CONFIG SYSTEM  (Rayfield-style)
+--
 -- Usage:
---   local Cfg = Lib:CreateConfig("MyScript")
---   Cfg:Register("ToggleName",  toggleRef,  false)
---   Cfg:Register("SliderName",  sliderRef,  50)
---   Cfg:Register("KeybindName", keybindRef, Enum.KeyCode.F)
---   Cfg:Load()   -- call after all elements are registered
---   Cfg:Save()   -- call whenever you want to persist
+--   local Cfg = Lib:CreateConfig("hi", "hi.json")
+--   -- Option A: manual register then load
+--   Cfg:Register("MyToggle",   toggleRef,   false)
+--   Cfg:Register("MyDropdown", dropdownRef, "Option1")
+--   Cfg:Register("MySlider",   sliderRef,   50)
+--   Cfg:Register("MyKeybind",  keybindRef,  Enum.KeyCode.F)
+--   Cfg:Load()   -- call after all Register() calls
+--
+--   -- Option B: Attach() — registers + wraps callback + auto-saves
+--   local myToggle = Win:Toggle("Godmode", false,
+--       Cfg:Attach("Godmode", nil, false, function(v) ... end))
+--   Cfg:Attach("Godmode", myToggle, false)  -- call after to link ref
+--   Cfg:Load()
+--
+--   -- Option C: one-liner Bind()
+--   local myToggle = Win:Toggle("Godmode", false,
+--       Cfg:Bind("Godmode", false, function(v) ... end))
+--   -- then after: Cfg:Link("Godmode", myToggle)
+--   Cfg:Load()
 -- ============================================================
-function Lib:CreateConfig(configName: string)
-	local CFG_FOLDER = "455Hub_Configs"
-	local CFG_FILE   = CFG_FOLDER .. "/" .. (configName or "default") .. ".json"
+function Lib:CreateConfig(folderName: string, fileName: string)
+	local CFG_FOLDER = folderName or "455Hub_Configs"
+	local CFG_FILE   = CFG_FOLDER .. "/" .. (fileName or "config.json")
 
-	-- { key = { ref, defaultValue } }
 	local _entries: {[string]: {ref: any, default: any}} = {}
+	local HttpService = game:GetService("HttpService")
 
 	local function _canUseFiles(): boolean
-		return (writefile ~= nil) and (readfile ~= nil) and (isfile ~= nil) and (isfolder ~= nil) and (makefolder ~= nil)
+		return (writefile ~= nil) and (readfile ~= nil)
+			and (isfile ~= nil) and (isfolder ~= nil) and (makefolder ~= nil)
 	end
 
 	local function _serialize(val: any): any
@@ -2080,7 +2095,9 @@ function Lib:CreateConfig(configName: string)
 			return { __type = "KeyCode", name = val.Name }
 		elseif t == "table" then
 			-- multi-dropdown returns {string}
-			return val
+			local out = {}
+			for i, v in ipairs(val) do out[i] = v end
+			return out
 		end
 		return nil
 	end
@@ -2097,12 +2114,21 @@ function Lib:CreateConfig(configName: string)
 
 	local Config = {}
 
-	-- Register an element reference + its default value
+	-- Register an element ref + default value under key
 	function Config:Register(key: string, ref: any, default: any)
 		_entries[key] = { ref = ref, default = default }
 	end
 
-	-- Save current values to file
+	-- Link a ref to an already-registered key (use after Bind/callback creation)
+	function Config:Link(key: string, ref: any)
+		if _entries[key] then
+			_entries[key].ref = ref
+		else
+			_entries[key] = { ref = ref, default = nil }
+		end
+	end
+
+	-- Save all registered values to CFG_FILE inside CFG_FOLDER
 	function Config:Save()
 		if not _canUseFiles() then return end
 		local data: {[string]: any} = {}
@@ -2111,24 +2137,23 @@ function Lib:CreateConfig(configName: string)
 			if ref and ref.Get then
 				local ok, val = pcall(function() return ref:Get() end)
 				if ok then
-					data[key] = _serialize(val)
+					local s = _serialize(val)
+					if s ~= nil then data[key] = s end
 				end
 			end
 		end
 		local ok2, err2 = pcall(function()
 			if not isfolder(CFG_FOLDER) then makefolder(CFG_FOLDER) end
-			local encoded = game:GetService("HttpService"):JSONEncode(data)
-			writefile(CFG_FILE, encoded)
+			writefile(CFG_FILE, HttpService:JSONEncode(data))
 		end)
 		if not ok2 then
 			warn("[455Hub Config] Save failed:", err2)
 		end
 	end
 
-	-- Load values from file and apply to registered refs
+	-- Load saved values and apply to refs; falls back to defaults
 	function Config:Load()
 		if not _canUseFiles() then
-			-- fallback: apply defaults only
 			for _, entry in pairs(_entries) do
 				if entry.ref and entry.ref.Set and entry.default ~= nil then
 					pcall(function() entry.ref:Set(entry.default) end)
@@ -2140,8 +2165,7 @@ function Lib:CreateConfig(configName: string)
 		local data: {[string]: any} = {}
 		local ok, err = pcall(function()
 			if isfile(CFG_FILE) then
-				local raw = readfile(CFG_FILE)
-				data = game:GetService("HttpService"):JSONDecode(raw)
+				data = HttpService:JSONDecode(readfile(CFG_FILE))
 			end
 		end)
 		if not ok then
@@ -2151,9 +2175,9 @@ function Lib:CreateConfig(configName: string)
 		for key, entry in pairs(_entries) do
 			local ref = entry.ref
 			if ref and ref.Set then
-				local val = data[key]
-				if val ~= nil then
-					pcall(function() ref:Set(_deserialize(val)) end)
+				local saved = data[key]
+				if saved ~= nil then
+					pcall(function() ref:Set(_deserialize(saved)) end)
 				elseif entry.default ~= nil then
 					pcall(function() ref:Set(entry.default) end)
 				end
@@ -2161,7 +2185,7 @@ function Lib:CreateConfig(configName: string)
 		end
 	end
 
-	-- Reset all to defaults and delete saved file
+	-- Reset all to defaults and delete the saved file
 	function Config:Reset()
 		for _, entry in pairs(_entries) do
 			if entry.ref and entry.ref.Set and entry.default ~= nil then
@@ -2171,16 +2195,51 @@ function Lib:CreateConfig(configName: string)
 		if _canUseFiles() then
 			pcall(function()
 				if isfile(CFG_FILE) then
-					-- writefile with empty then discard — some executors lack delfile
-					pcall(function() delfile(CFG_FILE) end)
+					pcall(function() (delfile :: any)(CFG_FILE) end)
 				end
 			end)
 		end
 	end
 
-	-- Auto-save helper: wrap a callback to save after it fires
+	--[[
+		AutoSave — register ref+default+callback, return wrapped callback
+		that auto-saves after every change. Legacy helper.
+
+		local myTgl = Win:Toggle("X", false, Cfg:AutoSave(nil,"X",false, function(v) end))
+		Cfg:Link("X", myTgl)
+		Cfg:Load()
+	]]
 	function Config:AutoSave(ref: any, key: string, default: any, callback: any)
 		self:Register(key, ref, default)
+		return function(val: any)
+			if callback then pcall(callback, val) end
+			task.defer(function() self:Save() end)
+		end
+	end
+
+	--[[
+		Bind — NEW Rayfield-style helper.
+		Returns a callback wrapper that auto-saves; link the ref afterward.
+
+		Example (Toggle):
+			local myTgl = Win:Toggle("ESP", false,
+			    Cfg:Bind("ESP", false, function(v) espEnabled = v end))
+			Cfg:Link("ESP", myTgl)
+
+		Example (Dropdown):
+			local myDrop = Win:Dropdown("Team", {"Red","Blue"}, 
+			    Cfg:Bind("Team", "Red", function(v) team = v end))
+			Cfg:Link("Team", myDrop)
+
+		Then call Cfg:Load() once after all Bind/Link calls.
+	]]
+	function Config:Bind(key: string, default: any, callback: any)
+		-- pre-register with no ref yet; Link() fills it in after element is created
+		if not _entries[key] then
+			_entries[key] = { ref = nil, default = default }
+		else
+			_entries[key].default = default
+		end
 		return function(val: any)
 			if callback then pcall(callback, val) end
 			task.defer(function() self:Save() end)
