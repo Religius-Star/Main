@@ -379,7 +379,9 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local sc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
 		sc.MaxTextSize = 12
 		updateCanvas()
-		return lbl
+		local L = {}
+		function L:Set(v: string) lbl.Text = v or "" end
+		return L
 	end
 
 	function Win:Section(text: string)
@@ -1615,7 +1617,9 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local sc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
 			sc.MaxTextSize = 11
 			updateCanvas()
-			return lbl
+			local L2 = {}
+			function L2:Set(v: string) lbl.Text = v or "" end
+			return L2
 		end
 
 		function Folder:Section(text: string)
