@@ -1,6 +1,6 @@
 local response = game:HttpGet("https://raw.githubusercontent.com/MainTreeUhh/ab/main/cf")
 local ab = loadstring(response)()
-local Window = ab:CreateWindow("Strongman Simulator")
+local Window = ab:CreateWindow("Strongman Simulator NIGGERS HUB SKIDDED")
 local Folder = Window:AddFolder("Main")
 
 -- Fire only real remotes, safely
