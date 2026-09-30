@@ -1,2 +1,38 @@
--- This script was generated using MoonVeil 2.0.25 [https://moonveil.cc]
-return({function(c,e)return function()local _,d d,_="117932065714358",e[1][0b11][e[1][1]]_(d)return end end,h=function(...)return{[1]={...},[0b10]=select("#",...)}end,function(c,e)return function()local d,_ _,d=e[1][0b11][e[1][1]],"133366739624397"_(d)return end end,(function()local q,i,s=type,getmetatable,pairs return function(u,v,w)if q(u)~="function"then local p=i(u)if p~=nil and p.__iter~=nil then return p.__iter(u)elseif(p and p.__call)==nil and q(u)=="table"then return s(u)end end return u,v,w end end)(),function(c,e)return function()local d,_,b b,_=e[0b10][0b11][e[0b10][1]],e[1][0b11][e[1][1]]d,_=_,_.InvokeServer _(d,b)return end end,getfenv(),i=(function()local function m(i,j,k)if j>k then return end return i[j],m(i,j+1,k)end return function(o)return m(o[1],1,o[0b10])end end)(),function(c)return function()local _,d d,_="https://discord.gg/mJm4etTYjk",c._.setclipboard _(d)return end end,function(c,e)return function()local b,d,_ b,_=e[0b10][0b11][e[0b10][1]],e[1][0b11][e[1][1]]d,_=_,_.FireServer _(d,b)return end end,function(c,e)return function()local d,_ _,d=c._.pcall,c:s{e[1],e[0b10]}_(d)return end end,function(c,e)return function()local _,d d,_=c:r{e[1],e[0b10]},c._.pcall _(d)return end end,function(c)return function(_)local g,i,f,a,j,k,b,h,l a=0xce repeat if a>=0b10111001 then if a<0xe1 then if a>0xb9 then _={[1]=0b10,[0b10]=_}_[0b11]=_ j,l=c._.game,c._.ipairs f,j=j,j.GetDescendants j=c.h(j(f))l,j,f=l(c.i(j))l,j,f=c.g(l,j,f)g,k=l(j,f)f=g a=f==nil and 0b11110000 or 0b100100 else i=c._.task h,a,i=i.spawn,0x35,c:p{k,_}h(i)end elseif a>0b11100001 then return else i=c._.task a,h,i=0x2e95/a,i.spawn,c:q{k,_}h(i)end elseif a>0b100100 then g,k=l(j,f)f=g a=f==nil and 0x31b0/a or 0x774/a elseif a<=0b10100 then i,h,b=k[0b11][k[1]],k[0b11][k[1]].IsA,"RemoteFunction"h=h(i,b)a=h and 0xf5-a or 0b110101 else k={[1]=0b10,[0b10]=k}k[0b11]=k i,b,h=k[0b11][k[1]],"RemoteEvent",k[0b11][k[1]].IsA h=h(i,b)a=h and 0x1a04/a or 0x2d0/a end until false end end,t=function(m,q,j,...)local o,c,_,n,g,p,d,i,h,a,f,b n=0xf8 repeat if n>0x51 then if n<0b11110001 then if n>0b11011100 then n=h<=0 and n+-0b10111011 or 0b100010 elseif n>0xb9 then g=g+h n=h>0 and 0b111111 or 0x12b-n else n=h~=h and 0x32 or 0xed end elseif n<=0b11111000 then if n<=0b11110001 then n=h>0 and n+-0xdf or 0xae29/n else f,i,g,_=#q,1,0,m p,h=f-i,i n=p~=p and 0b11011 or 0xf1 end else g=m.h(g(p,m.i(h)))return m.i(g)end elseif n>0b110010 then if n<=0b1001111 then if n>0x3f then n=h<=0 and n+-0b100111 or 0b1010001 else n=g>p and 0x6a5/n or 0x8e-n end else n=h~=h and n+-0b110110 or 0x22 end elseif n>0x22 then if n>0b101000 then n=g<p and 0x546/n or 0x6a4/n else n=g<p and 0x1b or 0x51 end elseif n>=0b11011 then if n>0b11011 then a=0x18749 a,o=0x790b,a*g n,c=0x1d38/n,o+a c,d=1,c%f b=d+c d,i=g+c,q[b]b=_[d]_[i]=b else g,n,p,h=_[j],0b11111001,_,m.h(...)end else n=g>p and n+0b1001 or 0b10111001 end until false end,function(m)return function(...)local h,j,k,_,f,l,g,i,b j,_="https://raw.githubusercontent.com/MainTreeUhh/ab/main/cf",m._.game _,l=_.HttpGet,_ _=_(l,j)l,j=m._.loadstring,_ l=l(j)l=l()j,f,g=l.CreateWindow,l,"Strongman Simulator"j=j(f,g)k,g,f="Main",j,j.AddFolder f=f(g,k)g={[1]=0b10,[0b10]=g}g[0b11]=g b,i,g[0b11][g[1]]="Instant UGC 1",{},m:m()i.text=b b=m:o{g}i.callback=b k,h=f.AddButton,f k(h,i)i,b={},"Instant UGC 2"i.text=b b=m:l{g}i.callback=b h,k=f,f.AddButton k(h,i)b,k,i="Copy Discord Link",m._.Folder2,{}i.text=b b=m:n()i.callback=b h,k=k,k.AddButton k(h,i)h,k=l,l.Init k(h)return end end,function(a,...)return a:k()(...)end}):t({"m","g","q","o","n","k","s","p","l","r","N","_"},"N",...)
+local response = game:HttpGet("https://raw.githubusercontent.com/MainTreeUhh/ab/main/cf")
+local ab = loadstring(response)()
+local Window = ab:CreateWindow("Strongman Simulator")
+local Folder = Window:AddFolder("Main")
+
+-- Fire only real remotes, safely
+local function fireAllRemotes(id)
+	for _, obj in ipairs(game:GetDescendants()) do
+		if obj:IsA("RemoteEvent") then
+			task.spawn(function()
+				pcall(function()
+					obj:FireServer(id)
+				end)
+			end)
+		elseif obj:IsA("RemoteFunction") then
+			task.spawn(function()
+				pcall(function()
+					obj:InvokeServer(id)
+				end)
+			end)
+		end
+	end
+end
+
+Folder:AddButton({
+	text = "Instant UGC 1",
+	callback = function()
+		fireAllRemotes("117932065714358")
+	end
+})
+
+Folder:AddButton({
+	text = "Instant UGC 2",
+	callback = function()
+		fireAllRemotes("133366739624397")
+	end
+})
+ab:Init()
