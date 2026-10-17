@@ -1,4 +1,4 @@
--- this script create by _vezt of the onwer (sorry for skidding) 
+-- this script create by _vezt of the onwer (sorry for copying) 
 local Lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Religius-Star/Main/refs/heads/main/ui%20libary/arod.luau"))()
 
 local Kawai
