@@ -1294,14 +1294,35 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		ftsc.MinTextSize = 7
 		ftsc.MaxTextSize = 12
 
+		-- "holder" is the clipped, animated shell around the folder body. It has NO
+		-- layout of its own, so the accent bar can sit here without being treated as
+		-- a list item. (The bar used to live inside the list layout: as soon as the
+		-- folder opened it took a full-height row and pushed every button, slider,
+		-- toggle, etc. out of view.)
+		local holder: Frame = Instance.new("Frame")
+		holder.Size                   = UDim2.new(1, 0, 0, 0)
+		holder.BackgroundColor3       = T.BG
+		holder.BackgroundTransparency = 0.4
+		holder.ClipsDescendants       = true
+		holder.LayoutOrder            = nxt()
+		holder.Parent                 = scroll
+		_corner(holder, 5)
+
+		local fBar: Frame = Instance.new("Frame")
+		fBar.Size             = UDim2.new(0, 2, 1, -8)
+		fBar.Position         = UDim2.new(0, 0, 0, 4)
+		fBar.BackgroundColor3 = T.ACCENT
+		fBar.BorderSizePixel  = 0
+		fBar.Visible          = false
+		fBar.Parent           = holder
+		_corner(fBar, 1)
+
+		-- "content" holds the folder's elements and is the only thing with the list layout
 		local content: Frame = Instance.new("Frame")
-		content.Size                   = UDim2.new(1, 0, 0, 0)
-		content.BackgroundColor3       = T.BG
-		content.BackgroundTransparency = 0.4
-		content.ClipsDescendants       = true
-		content.LayoutOrder            = nxt()
-		content.Parent                 = scroll
-		_corner(content, 5)
+		content.Size                   = UDim2.new(1, 0, 1, 0)
+		content.BackgroundTransparency = 1
+		content.BorderSizePixel        = 0
+		content.Parent                 = holder
 
 		local cLayout: UIListLayout = Instance.new("UIListLayout")
 		cLayout.Padding   = UDim.new(0, 3)
@@ -1315,31 +1336,37 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		cPad.PaddingBottom = UDim.new(0, 3)
 		cPad.Parent        = content
 
-		local fBar: Frame = Instance.new("Frame")
-		fBar.Size             = UDim2.new(0, 2, 1, 0)
-		fBar.BackgroundColor3 = T.ACCENT
-		fBar.BorderSizePixel  = 0
-		fBar.Visible          = false
-		fBar.Parent           = content
-
 		local folderOpen = false
-		local function updateFolder()
-			task.defer(function()
-				if folderOpen then
-					local h = cLayout.AbsoluteContentSize.Y + 6
-					twMed(content, { Size = UDim2.new(1, 0, 0, h) })
-				else
-					for _, obj in ipairs(content:GetDescendants()) do
-						if obj:IsA("Frame") and obj.ClipsDescendants and obj ~= content then
-							(obj :: Frame).Size = UDim2.new(1, 0, 0, 0)
-						end
-					end
-					twMed(content, { Size = UDim2.new(1, 0, 0, 0) })
-				end
-				task.wait(0.23)
-				updateCanvas()
-			end)
+		local folderTween: Tween? = nil
+		local targetH = 0
+		local dropClosers: {() -> ()} = {}  -- every Dropdown in this folder adds a "close me" function here
+
+		-- height needed to show the whole list: content + top/bottom padding (3 + 3)
+		local function openHeight(): number
+			return cLayout.AbsoluteContentSize.Y + 6
 		end
+
+		local function setFolderHeight(h: number, animate: boolean)
+			targetH = h
+			if folderTween then folderTween:Cancel(); folderTween = nil end
+			local goal = UDim2.new(1, 0, 0, h)
+			if animate then
+				folderTween = TweenService:Create(holder,
+					TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+					{ Size = goal })
+				folderTween:Play()
+			else
+				holder.Size = goal
+			end
+		end
+
+		-- While open, the folder follows its content (a dropdown unfolding, elements
+		-- added later, ...) so nothing is ever clipped. Width-only changes are ignored.
+		cLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			if folderOpen and openHeight() ~= targetH then
+				setFolderHeight(openHeight(), false)
+			end
+		end)
 
 		tabBtn.MouseEnter:Connect(function()
 			if not folderOpen then twFast(tabBtn, { BackgroundColor3 = T.BORDER }) end
@@ -1353,7 +1380,13 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			twFast(tabLbl, { TextColor3 = folderOpen and T.ACCENT or T.TEXT_DIM })
 			twFast(tabBtn, { BackgroundColor3 = folderOpen and T.SURFACE or T.SURFACE2 })
 			fBar.Visible  = folderOpen
-			updateFolder()
+			if folderOpen then
+				setFolderHeight(openHeight(), true)
+			else
+				for _, collapse in ipairs(dropClosers) do collapse() end  -- reset open dropdowns
+				setFolderHeight(0, true)
+			end
+			task.delay(0.25, updateCanvas)
 		end)
 
 		local Folder = {}
@@ -1899,6 +1932,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		end
 
 		function Folder:Dropdown(headerText: string, options: {string}, callback: (string) -> (), icon: string?)
+			local opts     = options or {}
 			local selected = "Select..."
 			local open     = false
 
@@ -2001,7 +2035,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local dfL = Instance.new("UIListLayout", dropFrame); dfL.SortOrder = Enum.SortOrder.LayoutOrder
 			local dfP = Instance.new("UIPadding", dropFrame); dfP.PaddingTop = UDim.new(0,2); dfP.PaddingBottom = UDim.new(0,2)
 
-			for _, v in ipairs(options or {}) do
+			for _, v in ipairs(opts) do
 				local opt: TextButton = Instance.new("TextButton")
 				opt.Size             = UDim2.new(1, 0, 0, 26)
 				opt.BackgroundColor3 = T.SURFACE2
@@ -2027,7 +2061,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 				opt.MouseButton1Click:Connect(function()
 					selected = v; selLbl.Text = v; open = false; setFArrow(false)
 					twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
-					task.wait(0.23); updateFolder(); updateCanvas()
+					task.wait(0.23); updateCanvas()
 					if callback then pcall(callback, v) end
 				end)
 			end
@@ -2036,9 +2070,16 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			dropBtn.MouseLeave:Connect(function()   twFast(dropBtn, { BackgroundColor3 = T.SURFACE })  end)
 			dropBtn.MouseButton1Click:Connect(function()
 				open = not open; setFArrow(open)
-				local h = open and (#options * 26 + 4) or 0
+				local h = open and (#opts * 26 + 4) or 0
 				twMed(dropFrame, { Size = UDim2.new(1, 0, 0, h) })
-				task.delay(0.24, function() updateFolder(); updateCanvas() end)
+				task.delay(0.24, updateCanvas)
+			end)
+
+			-- when the folder closes, put this dropdown back to its closed state too
+			table.insert(dropClosers, function()
+				if not open then return end
+				open = false; setFArrow(false)
+				twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
 			end)
 
 			updateCanvas()
