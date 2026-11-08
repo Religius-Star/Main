@@ -71,6 +71,41 @@ folderIcon:Dropdown("Folder Dropdown", {"A","B","C"}, function(v) print("Folder 
 
 
 -- ============================================================
+-- WINDOW 1 – FOLDER SECTION (NEW)
+-- ============================================================
+WindowWithIcon:Section("─── Folders ───")
+
+-- Folder 1
+local folder1 = WindowWithIcon:CreateFolder("Main Folder", "folder")
+folder1:Button("Button", function() print("main folder btn") end, "play")
+folder1:Toggle("Toggle", false, function(v) print("main folder toggle:", v) end, "zap")
+folder1:Slider("Slider", 0, 100, 50, function(v) print("main folder slider:", v) end)
+folder1:Dropdown("Dropdown", {"X","Y","Z"}, function(v) print("main folder drop:", v) end, "list")
+
+-- Folder 2
+local folder2 = WindowWithIcon:CreateFolder("Second Folder", "star")
+folder2:Button("Button", function() print("second folder btn") end, "play")
+folder2:Toggle("Toggle", false, function(v) print("second folder toggle:", v) end, "eye")
+folder2:Slider("Range", 1, 50, 10, function(v) print("second folder slider:", v) end)
+folder2:Dropdown("Target", {"Nearest", "Lowest HP"}, function(v) print("second folder target:", v) end, "crosshair")
+
+-- Folder 3 – with a multi-dropdown handle inside
+local folder3 = WindowWithIcon:CreateFolder("Picker", "folder")
+local folder3Picker = folder3:Dropdown(
+    "Pick (max 2)",
+    {"A","B","C","D"},
+    function(list) print("picker:", table.concat(list, ", ")) end,
+    "shopping-bag", true, 2
+)
+folder3:Button("Get Selection", function()
+    print("picked:", table.concat(folder3Picker:Get(), ", "))
+end, "eye")
+folder3:Button("Clear Selection", function()
+    folder3Picker:Clear()
+end, "x")
+
+
+-- ============================================================
 -- WINDOW 2 – WITHOUT ICONS
 -- ============================================================
 local WindowNoIcon = Library:CreateWindow("arod UI Non icon")   -- no window icon
@@ -136,6 +171,41 @@ folderNoIcon:Button("Folder Button", function() print("Folder btn (no icon)") en
 folderNoIcon:Toggle("Folder Toggle", false, function(v) print("Folder toggle (no icon):", v) end)
 folderNoIcon:Slider("Folder Slider", 0, 10, 5, function(v) print("Folder slider (no icon):", v) end)
 folderNoIcon:Dropdown("Folder Dropdown", {"A","B","C"}, function(v) print("Folder drop (no icon):", v) end)
+
+
+-- ============================================================
+-- WINDOW 2 – FOLDER SECTION (NEW)
+-- ============================================================
+WindowNoIcon:Section("─── Folders ───")
+
+-- Folder 1 (no icons)
+local nfolder1 = WindowNoIcon:CreateFolder("Main Folder")
+nfolder1:Button("Button", function() print("main folder btn (no icon)") end)
+nfolder1:Toggle("Toggle", false, function(v) print("main folder toggle (no icon):", v) end)
+nfolder1:Slider("Slider", 0, 100, 50, function(v) print("main folder slider (no icon):", v) end)
+nfolder1:Dropdown("Dropdown", {"X","Y","Z"}, function(v) print("main folder drop (no icon):", v) end)
+
+-- Folder 2 (no icons)
+local nfolder2 = WindowNoIcon:CreateFolder("Second Folder")
+nfolder2:Button("Button", function() print("second folder btn (no icon)") end)
+nfolder2:Toggle("Toggle", false, function(v) print("second folder toggle (no icon):", v) end)
+nfolder2:Slider("Range", 1, 50, 10, function(v) print("second folder slider (no icon):", v) end)
+nfolder2:Dropdown("Target", {"Nearest", "Lowest HP"}, function(v) print("second folder target (no icon):", v) end)
+
+-- Folder 3 (no icons) – multi-dropdown with handle
+local nfolder3 = WindowNoIcon:CreateFolder("Picker")
+local nfolder3Picker = nfolder3:Dropdown(
+    "Pick (max 3)",
+    {"A","B","C","D","E"},
+    function(list) print("nfolder3 picker:", table.concat(list, ", ")) end,
+    nil, true, 3
+)
+nfolder3:Button("Get Selection", function()
+    print("picked:", table.concat(nfolder3Picker:Get(), ", "))
+end)
+nfolder3:Button("Clear Selection", function()
+    nfolder3Picker:Clear()
+end)
 
 
 -- ============================================================
