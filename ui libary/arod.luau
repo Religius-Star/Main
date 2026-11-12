@@ -141,6 +141,535 @@ local function _reposition()
 	end
 end
 
+-- ============================================================
+-- CONFIG LIST  (state for the list dropdown with rename / delete / refresh)
+-- ============================================================
+-- #region listmodel
+-- Plain Lua on purpose (no type annotations) so it can be tested outside Roblox.
+-- Holds what the list knows: items, selection, which row is being renamed or
+-- armed for delete, and the status line. The GUI only draws it and calls these.
+local function _newListModel(handlers)
+	handlers = handlers or {}
+	local m = {
+		items = {}, selected = nil,
+		mode = "idle", target = nil, armToken = 0,   -- idle | rename | armed
+		status = nil, statusToken = 0,
+		onChange = nil,
+	}
+
+	local function changed() if m.onChange then m.onChange() end end
+	local function idle() m.mode = "idle"; m.target = nil end
+
+	local function indexOf(name)
+		for i, v in ipairs(m.items) do
+			if v == name then return i end
+		end
+	end
+
+	local function sortItems()
+		table.sort(m.items, function(a, b)
+			local la, lb = a:lower(), b:lower()
+			if la == lb then return a < b end
+			return la < lb
+		end)
+	end
+
+	-- runs a handler safely; always returns success, result
+	local function run(fn, fallback, ...)
+		if not fn then return false, fallback end
+		local called, success, result = pcall(fn, ...)
+		if not called then return false, tostring(success) end
+		return success, result
+	end
+
+	function m.setStatus(text, kind)
+		m.status = { text = text, kind = kind }
+		m.statusToken = m.statusToken + 1
+		changed()
+	end
+
+	-- with a token: only clears if no newer status has replaced it
+	function m.clearStatus(token)
+		if token ~= nil and token ~= m.statusToken then return end
+		m.status = nil
+		changed()
+	end
+
+	function m.setItems(list)
+		m.items = {}
+		for _, v in ipairs(list or {}) do m.items[#m.items + 1] = v end
+		sortItems()
+		if m.selected and not indexOf(m.selected) then m.selected = nil end
+		idle()
+		changed()
+	end
+
+	function m.get() return m.selected end
+
+	function m.select(name)
+		if not indexOf(name) then return false end
+		m.selected = name
+		idle()
+		if handlers.onSelect then pcall(handlers.onSelect, name) end
+		changed()
+		return true
+	end
+
+	-- like select, but silent (no onSelect)
+	function m.set(name)
+		if not indexOf(name) then return false end
+		m.selected = name
+		changed()
+		return true
+	end
+
+	function m.beginRename(name)
+		if not indexOf(name) then return false end
+		m.mode = "rename"; m.target = name
+		changed()
+		return true
+	end
+
+	function m.cancel() idle(); changed() end
+
+	function m.commitRename(newName)
+		local old = m.target
+		if m.mode ~= "rename" or not old then return false end
+		if newName == old then idle(); changed(); return true end
+		local ok, result = run(handlers.onRename, "Rename isn't available", old, newName)
+		if not ok then
+			m.setStatus(result or "Couldn't rename", "error")
+			return false
+		end
+		local finalName = type(result) == "string" and result or newName
+		local i = indexOf(old)
+		if i then m.items[i] = finalName end
+		sortItems()
+		if m.selected == old then m.selected = finalName end
+		idle()
+		m.setStatus("Renamed to " .. finalName, "ok")
+		return true
+	end
+
+	-- first press arms the row, a second press on the same row deletes it
+	function m.pressDelete(name)
+		if not indexOf(name) then return false end
+		if m.mode == "armed" and m.target == name then
+			local ok, result = run(handlers.onDelete, "Delete isn't available", name)
+			idle()
+			if not ok then
+				m.setStatus(result or "Couldn't delete", "error")
+				return false
+			end
+			table.remove(m.items, indexOf(name))
+			if m.selected == name then m.selected = nil end
+			m.setStatus("Deleted " .. name, "ok")
+			return true
+		end
+		m.mode = "armed"; m.target = name
+		m.armToken = m.armToken + 1
+		changed()
+		return true
+	end
+
+	-- the GUI calls this a few seconds after arming; stale tokens are ignored
+	function m.disarm(token)
+		if m.mode ~= "armed" or token ~= m.armToken then return end
+		idle()
+		changed()
+	end
+
+	function m.refresh()
+		local called, list = pcall(handlers.onRefresh or function() return m.items end)
+		if called and type(list) == "table" then
+			m.setItems(list)
+			m.setStatus("Refreshed", "ok")
+		else
+			m.setStatus("Couldn't refresh", "error")
+		end
+	end
+
+	return m
+end
+-- #endregion listmodel
+
+-- #region listview
+-- Draws a list model (_newListModel) as a dropdown: a header, rows and a status line.
+-- Plain Lua on purpose (no type annotations) so a fake GUI can drive it in tests.
+-- Window lists and folder lists differ only in size, so sizes come in as a table.
+local _LIST_DIMS = {
+	window = { head = 44, row = 28, ico = 14, headText = 10, selText = 13, rowText = 12, radius = 6, btn = 20 },
+	folder = { head = 40, row = 26, ico = 12, headText = 10, selText = 12, rowText = 11, radius = 5, btn = 18 },
+}
+
+local _LIST_RED = Color3.fromRGB(255, 80, 80)   -- same red the multi-select uses for "max reached"
+
+-- parent: where the list goes, nextOrder: gives the next LayoutOrder, handlers: see _newListModel
+-- (plus handlers.emptyText), onResize: called after the list opens or closes
+local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, items, handlers, onResize)
+	handlers = handlers or {}
+	local model = _newListModel(handlers)
+	local open = false
+	local lastShape = nil
+	local emptyH = dims.row + 12
+
+	-- header -----------------------------------------------------------------
+	local head = Instance.new("TextButton")
+	head.Name             = "Head"
+	head.Size             = UDim2.new(1, 0, 0, dims.head)
+	head.BackgroundColor3 = T.SURFACE
+	head.Text             = ""
+	head.LayoutOrder      = nextOrder()
+	head.Parent           = parent
+	_corner(head, dims.radius); _stroke(head)
+
+	local textLeft = 8
+	local iconId = _icon(iconName)
+	if iconId then
+		local ico = _makeIcon(head, iconId, dims.ico, T.ACCENT)
+		ico.Name     = "Icon"
+		ico.Position = UDim2.new(0, 6, 0.5, -dims.ico / 2)
+		ico.ZIndex   = head.ZIndex + 1
+		textLeft = 6 + dims.ico + 6
+	end
+	local rightSpace = 6 + 12 + 4 + dims.btn + 4   -- room for the arrow and the refresh button
+
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.Name                   = "Title"
+	titleLbl.Size                   = UDim2.new(1, -(textLeft + rightSpace), 0, 12)
+	titleLbl.Position               = UDim2.new(0, textLeft, 0, 4)
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Text                   = headerText or "Config list"
+	titleLbl.TextColor3             = T.TEXT_DIM
+	titleLbl.Font                   = Enum.Font.Gotham
+	titleLbl.TextScaled             = true
+	titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
+	titleLbl.ZIndex                 = head.ZIndex + 1
+	titleLbl.Parent                 = head
+	Instance.new("UITextSizeConstraint", titleLbl).MaxTextSize = dims.headText
+
+	local valueLbl = Instance.new("TextLabel")
+	valueLbl.Name                   = "Value"
+	valueLbl.Size                   = UDim2.new(1, -(textLeft + rightSpace), 0, 16)
+	valueLbl.Position               = UDim2.new(0, textLeft, 0, dims.head - 22)
+	valueLbl.BackgroundTransparency = 1
+	valueLbl.Text                   = ""
+	valueLbl.TextColor3             = T.TEXT
+	valueLbl.Font                   = Enum.Font.GothamBold
+	valueLbl.TextScaled             = true
+	valueLbl.TextXAlignment         = Enum.TextXAlignment.Left
+	valueLbl.ZIndex                 = head.ZIndex + 1
+	valueLbl.Parent                 = head
+	Instance.new("UITextSizeConstraint", valueLbl).MaxTextSize = dims.selText
+
+	-- arrow: a chevron icon when icons loaded, a text glyph otherwise
+	local chevDown, chevUp = _icon("chevron-down"), _icon("chevron-up")
+	local arrow
+	if chevDown then
+		arrow = Instance.new("ImageLabel")
+		arrow.Size                   = UDim2.new(0, 12, 0, 12)
+		arrow.AnchorPoint            = Vector2.new(1, 0.5)
+		arrow.Position               = UDim2.new(1, -6, 0.5, 0)
+		arrow.BackgroundTransparency = 1
+		arrow.Image                  = chevDown
+		arrow.ImageColor3            = T.ACCENT
+		arrow.ScaleType              = Enum.ScaleType.Fit
+	else
+		arrow = Instance.new("TextLabel")
+		arrow.Size                   = UDim2.new(0, 14, 1, 0)
+		arrow.AnchorPoint            = Vector2.new(1, 0.5)
+		arrow.Position               = UDim2.new(1, -5, 0.5, 0)
+		arrow.BackgroundTransparency = 1
+		arrow.Text                   = "▾"
+		arrow.TextColor3             = T.ACCENT
+		arrow.Font                   = Enum.Font.GothamBold
+		arrow.TextScaled             = true
+		Instance.new("UITextSizeConstraint", arrow).MaxTextSize = 14
+	end
+	arrow.Name   = "Arrow"
+	arrow.ZIndex = head.ZIndex + 1
+	arrow.Parent = head
+	local function setArrow(isOpen)
+		if chevDown then
+			arrow.Image = isOpen and (chevUp or chevDown) or chevDown
+		else
+			arrow.Text = isOpen and "▴" or "▾"
+		end
+	end
+
+	head.MouseEnter:Connect(function() twFast(head, { BackgroundColor3 = T.SURFACE2 }) end)
+	head.MouseLeave:Connect(function() twFast(head, { BackgroundColor3 = T.SURFACE }) end)
+
+	-- the list ---------------------------------------------------------------
+	local list = Instance.new("Frame")
+	list.Name             = "List"
+	list.Size             = UDim2.new(1, 0, 0, 0)
+	list.BackgroundColor3 = T.SURFACE2
+	list.ClipsDescendants = true
+	list.LayoutOrder      = nextOrder()
+	list.Parent           = parent
+	_corner(list, 5); _stroke(list)
+	Instance.new("UIListLayout", list).SortOrder = Enum.SortOrder.LayoutOrder
+	local listPad = Instance.new("UIPadding", list)
+	listPad.PaddingTop    = UDim.new(0, 2)
+	listPad.PaddingBottom = UDim.new(0, 2)
+
+	local function listHeight()
+		if #model.items == 0 then return emptyH + 4 end
+		return #model.items * dims.row + 4
+	end
+
+	local function setOpen(v)
+		open = v
+		setArrow(v)
+		twMed(list, { Size = UDim2.new(1, 0, 0, v and listHeight() or 0) })
+		if onResize then task.delay(0.24, onResize) end
+	end
+
+	local function buildEmpty()
+		local box = Instance.new("Frame")
+		box.Name                   = "Empty"
+		box.Size                   = UDim2.new(1, 0, 0, emptyH)
+		box.BackgroundTransparency = 1
+		box.BorderSizePixel        = 0
+		box.Parent                 = list
+		local l = Instance.new("TextLabel")
+		l.Size                   = UDim2.new(1, -20, 1, -8)
+		l.Position               = UDim2.new(0, 10, 0, 4)
+		l.BackgroundTransparency = 1
+		l.Text                   = handlers.emptyText or "No configs yet"
+		l.Font                   = Enum.Font.Gotham
+		l.TextSize               = dims.rowText - 2
+		l.TextWrapped            = true
+		l.TextColor3             = T.TEXT_DIM
+		l.TextXAlignment         = Enum.TextXAlignment.Left
+		l.ZIndex                 = box.ZIndex + 2
+		l.Parent                 = box
+	end
+
+	local function nameLabel(row, text, rightSpace, bold)
+		local l = Instance.new("TextLabel")
+		l.Name                   = "Label"
+		l.Size                   = UDim2.new(1, -(14 + rightSpace), 1, -4)
+		l.Position               = UDim2.new(0, 10, 0, 2)
+		l.BackgroundTransparency = 1
+		l.Text                   = text
+		l.Font                   = bold and Enum.Font.GothamBold or Enum.Font.Gotham
+		l.TextScaled             = true
+		l.TextColor3             = T.TEXT
+		l.TextXAlignment         = Enum.TextXAlignment.Left
+		l.ZIndex                 = row.ZIndex + 2
+		l.Parent                 = row
+		Instance.new("UITextSizeConstraint", l).MaxTextSize = dims.rowText
+		return l
+	end
+
+	-- a small button on the right side of a row: an icon if it loaded, a text glyph if not
+	local function iconButton(row, name, rightOffset, iconName, fallback, color, onClick)
+		local b = Instance.new("TextButton")
+		b.Name                   = name
+		b.Size                   = UDim2.new(0, dims.btn, 0, dims.btn)
+		b.AnchorPoint            = Vector2.new(1, 0.5)
+		b.Position               = UDim2.new(1, -rightOffset, 0.5, 0)
+		b.BackgroundTransparency = 1
+		b.Text                   = ""
+		b.ZIndex                 = row.ZIndex + 3
+		b.Parent                 = row
+		local id = _icon(iconName)
+		local glyph, prop
+		if id then
+			glyph = _makeIcon(b, id, dims.btn - 8, color)
+			glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+			glyph.Position    = UDim2.new(0.5, 0, 0.5, 0)
+			prop = "ImageColor3"
+		else
+			glyph = Instance.new("TextLabel")
+			glyph.Size                   = UDim2.new(1, 0, 1, 0)
+			glyph.BackgroundTransparency = 1
+			glyph.Text                   = fallback
+			glyph.TextColor3             = color
+			glyph.Font                   = Enum.Font.GothamBold
+			glyph.TextScaled             = true
+			glyph.Parent                 = b
+			Instance.new("UITextSizeConstraint", glyph).MaxTextSize = 11
+			prop = "TextColor3"
+		end
+		glyph.ZIndex = b.ZIndex + 1
+		b.MouseEnter:Connect(function() twFast(glyph, { [prop] = T.ACCENT }) end)
+		b.MouseLeave:Connect(function() twFast(glyph, { [prop] = color }) end)
+		b.MouseButton1Click:Connect(function() onClick(glyph) end)
+		return b, glyph
+	end
+
+	-- refresh button in the header (left of the arrow); its icon spins once when pressed
+	iconButton(head, "Refresh", 6 + 12 + 4, "refresh-cw", "↻", T.TEXT_DIM, function(glyph)
+		glyph.Rotation = 0
+		twSlow(glyph, { Rotation = 360 })
+		model.refresh()
+	end)
+
+	local function buildRow(index, name)
+		local selected = model.selected == name
+		local armed    = model.mode == "armed" and model.target == name
+		local renaming = model.mode == "rename" and model.target == name
+
+		local row = Instance.new("Frame")
+		row.Name             = "Row"
+		row.Size             = UDim2.new(1, 0, 0, dims.row)
+		row.BackgroundColor3 = selected and T.SURFACE or T.SURFACE2
+		row.BorderSizePixel  = 0
+		row.LayoutOrder      = index
+		row.Parent           = list
+
+		if selected then
+			local mark = Instance.new("Frame")
+			mark.Name             = "Mark"
+			mark.Size             = UDim2.new(0, 2, 1, -8)
+			mark.Position         = UDim2.new(0, 0, 0, 4)
+			mark.BackgroundColor3 = T.ACCENT
+			mark.BorderSizePixel  = 0
+			mark.ZIndex           = row.ZIndex + 2
+			mark.Parent           = row
+			_corner(mark, 1)
+		end
+
+		if renaming then
+			-- the row turns into a text box: Enter or the check saves, the cross or Escape cancels
+			local box = Instance.new("TextBox")
+			box.Name              = "Editor"
+			box.Size              = UDim2.new(1, -(12 + dims.btn * 2 + 10), 1, -8)
+			box.Position          = UDim2.new(0, 8, 0, 4)
+			box.BackgroundColor3  = T.BG
+			box.Text              = name
+			box.PlaceholderText   = "New name"
+			box.TextColor3        = T.TEXT
+			box.PlaceholderColor3 = T.TEXT_DIM
+			box.Font              = Enum.Font.GothamBold
+			box.TextSize          = dims.rowText
+			box.TextXAlignment    = Enum.TextXAlignment.Left
+			box.ClearTextOnFocus  = false
+			box.ZIndex            = row.ZIndex + 2
+			box.Parent            = row
+			_corner(box, 4); _stroke(box, T.ACCENT)
+			Instance.new("UIPadding", box).PaddingLeft = UDim.new(0, 6)
+			-- losing focus any other way (a tap on the check button, say) must not close the editor
+			box.FocusLost:Connect(function(enter, input)
+				if enter then
+					model.commitRename(box.Text)
+				elseif input and input.KeyCode == Enum.KeyCode.Escape then
+					model.cancel()
+				end
+			end)
+			iconButton(row, "Cancel", 4, "x", "✕", T.TEXT_DIM, function() model.cancel() end)
+			iconButton(row, "Save", 4 + dims.btn + 2, "check", "✓", T.ACCENT, function() model.commitRename(box.Text) end)
+			task.defer(function() box:CaptureFocus() end)
+			return
+		end
+
+		-- clicking the row picks it
+		local pick = Instance.new("TextButton")
+		pick.Name                   = "Pick"
+		pick.Size                   = UDim2.new(1, 0, 1, 0)
+		pick.BackgroundTransparency = 1
+		pick.Text                   = ""
+		pick.ZIndex                 = row.ZIndex + 1
+		pick.Parent                 = row
+		pick.MouseEnter:Connect(function() if not selected then twFast(row, { BackgroundColor3 = T.BORDER }) end end)
+		pick.MouseLeave:Connect(function() if not selected then twFast(row, { BackgroundColor3 = T.SURFACE2 }) end end)
+		pick.MouseButton1Click:Connect(function()
+			model.select(name)
+			setOpen(false)
+		end)
+
+		if armed then
+			-- the X turned into a "Delete?" pill: one more press deletes, or it wears off
+			nameLabel(row, name, 62, selected)
+			local sure = Instance.new("TextButton")
+			sure.Name             = "Confirm"
+			sure.Size             = UDim2.new(0, 56, 0, dims.btn - 2)
+			sure.AnchorPoint      = Vector2.new(1, 0.5)
+			sure.Position         = UDim2.new(1, -4, 0.5, 0)
+			sure.BackgroundColor3 = T.ACCENT
+			sure.AutoButtonColor  = false
+			sure.Text             = "Delete?"
+			sure.TextColor3       = T.TEXT
+			sure.Font             = Enum.Font.GothamBold
+			sure.TextSize         = dims.rowText - 2
+			sure.ZIndex           = row.ZIndex + 3
+			sure.Parent           = row
+			_corner(sure, 4)
+			sure.MouseButton1Click:Connect(function() model.pressDelete(name) end)
+		else
+			nameLabel(row, name, dims.btn * 2 + 10, selected)
+			iconButton(row, "Delete", 4, "x", "✕", T.TEXT_DIM, function()
+				model.pressDelete(name)
+				local token = model.armToken
+				task.delay(3, function() model.disarm(token) end)   -- the confirm wears off
+			end)
+			iconButton(row, "Rename", 4 + dims.btn + 2, "pencil", "Aa", T.TEXT_DIM, function()
+				model.beginRename(name)
+			end)
+		end
+	end
+
+	-- drawing ----------------------------------------------------------------
+	local function renderHeader()
+		local st = model.status
+		if st then
+			valueLbl.Text       = st.text
+			valueLbl.TextColor3 = st.kind == "error" and _LIST_RED or T.ACCENT
+		elseif model.selected then
+			valueLbl.Text       = model.selected
+			valueLbl.TextColor3 = T.TEXT
+		else
+			valueLbl.Text       = #model.items == 0 and "No configs yet" or "Select a config"
+			valueLbl.TextColor3 = T.TEXT_DIM
+		end
+	end
+
+	local function renderRows()
+		-- only redraw when the rows would look different, so a status message does not rebuild an open editor
+		local shape = table.concat(model.items, "\n") .. "|" .. tostring(model.selected)
+			.. "|" .. model.mode .. "|" .. tostring(model.target)
+		if shape == lastShape then return end
+		lastShape = shape
+		for _, child in ipairs(list:GetChildren()) do
+			if child:IsA("GuiObject") then child:Destroy() end
+		end
+		if #model.items == 0 then
+			buildEmpty()
+		else
+			for i, name in ipairs(model.items) do buildRow(i, name) end
+		end
+		if open then twMed(list, { Size = UDim2.new(1, 0, 0, listHeight()) }) end
+	end
+
+	local lastStatus = 0
+	model.onChange = function()
+		if model.status and model.statusToken ~= lastStatus then
+			lastStatus = model.statusToken
+			local token = model.statusToken
+			task.delay(2.5, function() model.clearStatus(token) end)   -- messages fade after a moment
+		end
+		renderHeader()
+		renderRows()
+	end
+
+	head.MouseButton1Click:Connect(function() setOpen(not open) end)
+	model.setItems(items or {})
+
+	-- what the caller gets back
+	local L = { Model = model }
+	function L:Get() return model.get() end
+	function L:Set(name) return model.set(name) end   -- select without calling onSelect
+	function L:SetItems(newItems) model.setItems(newItems) end
+	function L:Refresh() model.refresh() end
+	function L:Status(text, kind) model.setStatus(text, kind) end   -- kind: "ok" or "error"
+	function L:Close() if open then setOpen(false) end end
+	return L
+end
+-- #endregion listview
+
 function Lib:CreateWindow(title: string, titleIcon: string?)
 	local winData: {[string]: any} = { shown = false }
 	table.insert(_windows, winData)
@@ -726,6 +1255,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		end
 
 		local dropBtn: TextButton = Instance.new("TextButton")
+		dropBtn.Name             = "DropButton"
 		dropBtn.Size             = UDim2.new(1, 0, 0, 44)
 		dropBtn.BackgroundColor3 = T.SURFACE
 		dropBtn.Text             = ""
@@ -746,6 +1276,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local badgeLbl: TextLabel?
 		if _multi then
 			local badge: TextLabel = Instance.new("TextLabel")
+			badge.Name               = "DropBadge"
 			badge.Size               = UDim2.new(0, 28, 0, 14)
 			badge.AnchorPoint        = Vector2.new(1, 0)
 			badge.Position           = UDim2.new(1, -28, 0, 4)
@@ -779,6 +1310,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		hdsc.MaxTextSize = 10
 
 		local selLbl: TextLabel = Instance.new("TextLabel")
+		selLbl.Name               = "DropValue"
 		selLbl.Size               = UDim2.new(1, -(textOffsetL + (_multi and 34 or 24)), 0, 18)
 		selLbl.Position           = UDim2.new(0, textOffsetL, 0, 17)
 		selLbl.BackgroundTransparency = 1
@@ -836,6 +1368,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		end
 
 		local dropFrame: Frame = Instance.new("Frame")
+		dropFrame.Name             = "DropList"
 		dropFrame.Size             = UDim2.new(1, 0, 0, 0)
 		dropFrame.BackgroundColor3 = T.SURFACE2
 		dropFrame.ClipsDescendants = true
@@ -855,6 +1388,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 		for _, v in ipairs(options or {}) do
 			local opt: TextButton = Instance.new("TextButton")
+			opt.Name             = "DropOption"
 			opt.Size             = UDim2.new(1, 0, 0, 28)
 			opt.BackgroundColor3 = T.SURFACE2
 			opt.Text             = ""
@@ -879,6 +1413,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local checkDot: Frame?
 			if _multi then
 				local dot: Frame = Instance.new("Frame")
+				dot.Name             = "DropDot"
 				dot.Size             = UDim2.new(0, 12, 0, 12)
 				dot.AnchorPoint      = Vector2.new(1, 0.5)
 				dot.Position         = UDim2.new(1, -8, 0.5, 0)
@@ -1004,6 +1539,16 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			end
 		end
 		return D
+	end
+
+	-- Config list: a dropdown of saved configs. The pencil renames a row, the X deletes it (press twice),
+	-- the arrows button in the header refreshes the list.
+	-- handlers: onSelect(name), onRename(old, new) -> ok, nameOrError, onDelete(name) -> ok, error,
+	--           onRefresh() -> {names}, emptyText
+	function Win:ConfigList(headerText: string, items: {string}?, handlers: any, icon: string?)
+		local L = _buildConfigList(scroll, nxt, _LIST_DIMS.window, headerText, icon, items, handlers, updateCanvas)
+		updateCanvas()
+		return L
 	end
 
 	function Win:TextBox(labelText: string, default: string, placeholder: string, callback: (string) -> (), icon: string?)
@@ -1931,12 +2476,34 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			return K2
 		end
 
-		function Folder:Dropdown(headerText: string, options: {string}, callback: (string) -> (), icon: string?)
-			local opts     = options or {}
-			local selected = "Select..."
-			local open     = false
+		function Folder:Dropdown(headerText: string, options: {string}, callback: any, icon: any, multi: boolean?, maxPick: number?)
+			local opts = options or {}
+			-- backward compat: a boolean in the icon slot is the multi flag (no icon)
+			local iconName = icon
+			local isMulti  = multi
+			local maxN     = maxPick
+			if type(icon) == "boolean" then
+				isMulti  = icon
+				maxN     = multi :: any
+				iconName = nil
+			end
+			isMulti = isMulti == true
+			maxN    = type(maxN) == "number" and maxN or #opts
+
+			local selected: string = "Select..."
+			local selectedSet: {[string]: boolean} = {}
+			local selectedList: {string} = {}
+			local open = false
+
+			local function buildLabel(): string
+				if not isMulti then return selected end
+				if #selectedList == 0 then return "Select..." end
+				if #selectedList <= 2 then return table.concat(selectedList, ", ") end
+				return selectedList[1] .. ", +" .. (#selectedList - 1)
+			end
 
 			local dropBtn: TextButton = Instance.new("TextButton")
+			dropBtn.Name             = "DropButton"
 			dropBtn.Size             = UDim2.new(1, 0, 0, 40)
 			dropBtn.BackgroundColor3 = T.SURFACE
 			dropBtn.Text             = ""
@@ -1945,7 +2512,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			_fStyle(dropBtn)
 
 			local tOffL = 8
-			local fdid  = _icon(icon)
+			local fdid  = _icon(iconName)
 			if fdid then
 				local ico = _makeIcon(dropBtn, fdid, 12, T.ACCENT)
 				ico.Position = UDim2.new(0, 6, 0.5, -6)
@@ -1953,8 +2520,31 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 				tOffL        = 22
 			end
 
+			-- multi badge: shows "2/3" (top right, left of the arrow)
+			local badgeLbl: TextLabel?
+			if isMulti then
+				local badge: TextLabel = Instance.new("TextLabel")
+				badge.Name               = "DropBadge"
+				badge.Size               = UDim2.new(0, 26, 0, 12)
+				badge.AnchorPoint        = Vector2.new(1, 0)
+				badge.Position           = UDim2.new(1, -22, 0, 3)
+				badge.BackgroundColor3   = T.ACCENT_DIM
+				badge.Text               = "0/" .. maxN
+				badge.Font               = Enum.Font.GothamBold
+				badge.TextScaled         = true
+				badge.TextColor3         = T.ACCENT
+				badge.TextXAlignment     = Enum.TextXAlignment.Center
+				badge.ZIndex             = dropBtn.ZIndex + 2
+				badge.Parent             = dropBtn
+				_corner(badge, 4)
+				local fbsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", badge)
+				fbsc.MinTextSize = 6
+				fbsc.MaxTextSize = 9
+				badgeLbl = badge
+			end
+
 			local headLbl: TextLabel = Instance.new("TextLabel")
-			headLbl.Size               = UDim2.new(1, -(tOffL + 20), 0, 12)
+			headLbl.Size               = UDim2.new(1, -(tOffL + (isMulti and 52 or 20)), 0, 12)
 			headLbl.Position           = UDim2.new(0, tOffL, 0, 3)
 			headLbl.BackgroundTransparency = 1
 			headLbl.Text               = headerText or "Dropdown"
@@ -1968,6 +2558,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			fhdsc.MaxTextSize = 10
 
 			local selLbl: TextLabel = Instance.new("TextLabel")
+			selLbl.Name               = "DropValue"
 			selLbl.Size               = UDim2.new(1, -(tOffL + 20), 0, 16)
 			selLbl.Position           = UDim2.new(0, tOffL, 0, 15)
 			selLbl.BackgroundTransparency = 1
@@ -2024,6 +2615,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			end
 
 			local dropFrame: Frame = Instance.new("Frame")
+			dropFrame.Name             = "DropList"
 			dropFrame.Size             = UDim2.new(1, 0, 0, 0)
 			dropFrame.BackgroundColor3 = T.SURFACE2
 			dropFrame.ClipsDescendants = true
@@ -2035,15 +2627,19 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local dfL = Instance.new("UIListLayout", dropFrame); dfL.SortOrder = Enum.SortOrder.LayoutOrder
 			local dfP = Instance.new("UIPadding", dropFrame); dfP.PaddingTop = UDim.new(0,2); dfP.PaddingBottom = UDim.new(0,2)
 
+			local optFrames: {[string]: TextButton} = {}
+
 			for _, v in ipairs(opts) do
 				local opt: TextButton = Instance.new("TextButton")
+				opt.Name             = "DropOption"
 				opt.Size             = UDim2.new(1, 0, 0, 26)
 				opt.BackgroundColor3 = T.SURFACE2
 				opt.Text             = ""
 				opt.Parent           = dropFrame
+				optFrames[v]         = opt
 
 				local optLbl: TextLabel = Instance.new("TextLabel")
-				optLbl.Size               = UDim2.new(1, -14, 1, -4)
+				optLbl.Size               = UDim2.new(1, isMulti and -26 or -14, 1, -4)
 				optLbl.Position           = UDim2.new(0, 6, 0, 2)
 				optLbl.BackgroundTransparency = 1
 				optLbl.Text               = v
@@ -2056,13 +2652,72 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 				local fodsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", optLbl)
 				fodsc.MaxTextSize = 11
 
-				opt.MouseEnter:Connect(function()   twFast(opt, { BackgroundColor3 = T.BORDER }) end)
-				opt.MouseLeave:Connect(function()   twFast(opt, { BackgroundColor3 = T.SURFACE2 }) end)
+				-- multi: check box on the right
+				local checkDot: Frame?
+				if isMulti then
+					local dot: Frame = Instance.new("Frame")
+					dot.Name             = "DropDot"
+					dot.Size             = UDim2.new(0, 10, 0, 10)
+					dot.AnchorPoint      = Vector2.new(1, 0.5)
+					dot.Position         = UDim2.new(1, -8, 0.5, 0)
+					dot.BackgroundColor3 = T.BORDER
+					dot.ZIndex           = opt.ZIndex + 2
+					dot.Parent           = opt
+					_corner(dot, 3)
+					checkDot = dot
+				end
+
+				local function refreshOpt()
+					if not isMulti then return end
+					local on = selectedSet[v] == true
+					twFast(opt, { BackgroundColor3 = on and T.SURFACE or T.SURFACE2 })
+					if checkDot then
+						twFast(checkDot, { BackgroundColor3 = on and T.ACCENT or T.BORDER })
+					end
+					optLbl.TextColor3 = on and T.TEXT or T.TEXT_DIM
+				end
+
+				opt.MouseEnter:Connect(function()
+					if not (selectedSet[v] and isMulti) then
+						twFast(opt, { BackgroundColor3 = T.BORDER })
+					end
+				end)
+				opt.MouseLeave:Connect(function()
+					if isMulti then refreshOpt()
+					else twFast(opt, { BackgroundColor3 = T.SURFACE2 }) end
+				end)
+
 				opt.MouseButton1Click:Connect(function()
-					selected = v; selLbl.Text = v; open = false; setFArrow(false)
-					twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
-					task.wait(0.23); updateCanvas()
-					if callback then pcall(callback, v) end
+					if not isMulti then
+						selected = v; selLbl.Text = v; open = false; setFArrow(false)
+						twMed(dropFrame, { Size = UDim2.new(1, 0, 0, 0) })
+						task.wait(0.23); updateCanvas()
+						if callback then pcall(callback, v) end
+					else
+						if selectedSet[v] then
+							selectedSet[v] = nil
+							for i, sv in ipairs(selectedList) do
+								if sv == v then table.remove(selectedList, i); break end
+							end
+						else
+							if #selectedList >= maxN then
+								-- limit reached: flash the badge red for a moment
+								if badgeLbl then
+									twFast(badgeLbl, { TextColor3 = Color3.fromRGB(255, 80, 80) })
+									task.delay(0.4, function()
+										twFast(badgeLbl, { TextColor3 = T.ACCENT })
+									end)
+								end
+								return
+							end
+							selectedSet[v] = true
+							table.insert(selectedList, v)
+						end
+						refreshOpt()
+						selLbl.Text = buildLabel()
+						if badgeLbl then badgeLbl.Text = #selectedList .. "/" .. maxN end
+						if callback then pcall(callback, selectedList) end
+					end
 				end)
 			end
 
@@ -2084,9 +2739,56 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 
 			updateCanvas()
 			local D = {}
-			function D:Get() return selected end
-			function D:Set(v) selected = v; selLbl.Text = v end
+			-- single: the picked string, multi: the list of picked strings
+			function D:Get() return isMulti and selectedList or selected end
+
+			-- bring every row in line with selectedSet
+			local function paintRows()
+				for item, frame in pairs(optFrames) do
+					local on = selectedSet[item] == true
+					frame.BackgroundColor3 = on and T.SURFACE or T.SURFACE2
+					local dot = frame:FindFirstChildOfClass("Frame")
+					if dot then dot.BackgroundColor3 = on and T.ACCENT or T.BORDER end
+					local lbl = frame:FindFirstChildOfClass("TextLabel")
+					if lbl then lbl.TextColor3 = on and T.TEXT or T.TEXT_DIM end
+				end
+			end
+
+			-- single: pass a string, multi: pass a list of strings
+			function D:Set(v: any)
+				if not isMulti then
+					selected = v; selLbl.Text = v
+				else
+					selectedSet = {}; selectedList = {}
+					for _, item in ipairs(v) do
+						selectedSet[item] = true
+						table.insert(selectedList, item)
+					end
+					selLbl.Text = buildLabel()
+					if badgeLbl then badgeLbl.Text = #selectedList .. "/" .. maxN end
+					paintRows()
+				end
+			end
+
+			function D:Clear()
+				if isMulti then
+					selectedSet = {}; selectedList = {}
+					selLbl.Text = "Select..."
+					if badgeLbl then badgeLbl.Text = "0/" .. maxN end
+					paintRows()
+				else
+					selected = "Select..."; selLbl.Text = selected
+				end
+			end
 			return D
+		end
+
+		-- same list as the window's, sized for a folder; it folds up when the folder closes
+		function Folder:ConfigList(headerText: string, items: {string}?, handlers: any, icon: string?)
+			local L = _buildConfigList(content, fnxt, _LIST_DIMS.folder, headerText, icon, items, handlers, updateCanvas)
+			table.insert(dropClosers, function() L:Close() end)
+			updateCanvas()
+			return L
 		end
 
 		return Folder
@@ -2095,6 +2797,127 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	updateCanvas()
 	return Win
 end
+
+-- ============================================================
+-- CONFIG STORE  (file layer behind the config list)
+-- ============================================================
+-- #region store
+-- Plain Lua on purpose (no type annotations) so it can be tested outside Roblox.
+-- `fs` holds the executor's file functions; any of them may be nil.
+
+-- letters, numbers, space, _ and -, trimmed, at most 32 characters
+local function _cleanConfigName(raw)
+	local n = tostring(raw or "")
+	n = n:gsub("%.json$", "")
+	n = n:gsub("[^%w _%-]", "")
+	n = n:gsub("^%s+", "")
+	n = n:sub(1, 32)
+	n = n:gsub("%s+$", "")
+	return n
+end
+
+local function _newConfigStore(folder, fs)
+	fs = fs or {}
+	local store = {}
+	local known = {}  -- configs saved this session; the list falls back to these without listfiles
+
+	-- names of the saved configs, sorted A-Z (no .json)
+	function store.list()
+		local names = {}
+		if not fs.listfiles then
+			for name in pairs(known) do names[#names + 1] = name end
+		elseif fs.isfolder and fs.isfolder(folder) then
+			local ok, files = pcall(fs.listfiles, folder)
+			if ok and type(files) == "table" then
+				for _, p in ipairs(files) do
+					local base = tostring(p):match("([^/\\]+)$")
+					if base and base:lower():sub(-5) == ".json" then
+						names[#names + 1] = base:sub(1, -6)
+					end
+				end
+			end
+		end
+		table.sort(names, function(a, b)
+			local la, lb = a:lower(), b:lower()
+			if la == lb then return a < b end
+			return la < lb
+		end)
+		return names
+	end
+
+	local function file(name) return folder .. "/" .. name .. ".json" end
+
+	function store.exists(name)
+		name = _cleanConfigName(name)
+		if name == "" or not fs.isfile then return false end
+		local ok, found = pcall(fs.isfile, file(name))
+		return ok and found == true
+	end
+
+	-- saves text to <folder>/<name>.json. Returns true, cleanedName  or  false, reason
+	function store.write(name, text)
+		name = _cleanConfigName(name)
+		if name == "" then return false, "Enter a name first" end
+		if not (fs.writefile and fs.isfolder and fs.makefolder) then
+			return false, "Your executor can't save files"
+		end
+		local ok, err = pcall(function()
+			if not fs.isfolder(folder) then fs.makefolder(folder) end
+			fs.writefile(file(name), text)
+		end)
+		if not ok then return false, "Couldn't save: " .. tostring(err) end
+		known[name] = true
+		return true, name
+	end
+
+	-- returns the saved text, or nil, reason
+	function store.read(name)
+		name = _cleanConfigName(name)
+		if not store.exists(name) or not fs.readfile then return nil, "Config not found" end
+		local ok, text = pcall(fs.readfile, file(name))
+		if not ok then return nil, "Couldn't read: " .. tostring(text) end
+		return text
+	end
+
+	function store.delete(name)
+		name = _cleanConfigName(name)
+		if not store.exists(name) then return false, "Config not found" end
+		if not fs.delfile then return false, "Your executor can't delete files" end
+		local ok, err = pcall(fs.delfile, file(name))
+		if not ok then return false, "Couldn't delete: " .. tostring(err) end
+		known[name] = nil
+		return true
+	end
+
+	-- moves old -> new. Returns true, cleanedNewName  or  false, reason
+	function store.rename(old, new)
+		old, new = _cleanConfigName(old), _cleanConfigName(new)
+		if new == "" then return false, "Enter a name first" end
+		if not store.exists(old) then return false, "Config not found" end
+		if old == new then return true, new end
+		-- only the letter case changed: on Windows that is the same file
+		local sameFile = old:lower() == new:lower()
+		if not sameFile and store.exists(new) then return false, "Name already used" end
+		if not fs.delfile then return false, "Your executor can't delete files" end
+		local text, err = store.read(old)
+		if not text then return false, err end
+		if sameFile then
+			local ok, derr = store.delete(old)
+			if not ok then return false, derr end
+			local wok, werr = store.write(new, text)
+			if not wok then store.write(old, text); return false, werr end
+		else
+			local wok, werr = store.write(new, text)
+			if not wok then return false, werr end
+			local dok, derr = store.delete(old)
+			if not dok then store.delete(new); return false, derr end
+		end
+		return true, new
+	end
+
+	return store
+end
+-- #endregion store
 
 -- ============================================================
 -- CONFIG SYSTEM  (Rayfield-style)
@@ -2122,7 +2945,13 @@ end
 -- ============================================================
 function Lib:CreateConfig(folderName: string, fileName: string)
 	local CFG_FOLDER = folderName or "455Hub_Configs"
-	local CFG_FILE   = CFG_FOLDER .. "/" .. (fileName or "config.json")
+	-- the config that Save() / Load() use (nil once it has been deleted from the list)
+	local currentName = _cleanConfigName(fileName or "config.json")
+	if currentName == "" then currentName = "config" end
+	local store = _newConfigStore(CFG_FOLDER, {
+		isfolder = isfolder, makefolder = makefolder, isfile = isfile, readfile = readfile,
+		writefile = writefile, listfiles = listfiles, delfile = delfile,
+	})
 
 	local _entries: {[string]: {ref: any, default: any}} = {}
 	local HttpService = game:GetService("HttpService")
@@ -2157,6 +2986,43 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 		return raw
 	end
 
+	-- current value of every registered element, ready for JSON
+	local function _collect()
+		local data = {}
+		for key, entry in pairs(_entries) do
+			local ref = entry.ref
+			if ref and ref.Get then
+				local ok, val = pcall(function() return ref:Get() end)
+				if ok then
+					local s = _serialize(val)
+					if s ~= nil then data[key] = s end
+				end
+			end
+		end
+		return data
+	end
+
+	local function _encode()
+		local ok, text = pcall(function() return HttpService:JSONEncode(_collect()) end)
+		if not ok then return nil, "Couldn't turn the settings into a file" end
+		return text
+	end
+
+	-- put saved values on the elements; anything missing falls back to its default
+	local function _apply(data)
+		for key, entry in pairs(_entries) do
+			local ref = entry.ref
+			if ref and ref.Set then
+				local saved = data[key]
+				if saved ~= nil then
+					pcall(function() ref:Set(_deserialize(saved)) end)
+				elseif entry.default ~= nil then
+					pcall(function() ref:Set(entry.default) end)
+				end
+			end
+		end
+	end
+
 	local Config = {}
 
 	-- Register an element ref + default value under key
@@ -2173,32 +3039,21 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 		end
 	end
 
-	-- Save all registered values to CFG_FILE inside CFG_FOLDER
+	-- Save all registered values to the current config (inside CFG_FOLDER)
 	function Config:Save()
-		if not _canUseFiles() then return end
-		local data: {[string]: any} = {}
-		for key, entry in pairs(_entries) do
-			local ref = entry.ref
-			if ref and ref.Get then
-				local ok, val = pcall(function() return ref:Get() end)
-				if ok then
-					local s = _serialize(val)
-					if s ~= nil then data[key] = s end
-				end
-			end
+		if not _canUseFiles() or not currentName then return end
+		local text, err = _encode()
+		if text then
+			local ok, werr = store.write(currentName, text)
+			if ok then return end
+			err = werr
 		end
-		local ok2, err2 = pcall(function()
-			if not isfolder(CFG_FOLDER) then makefolder(CFG_FOLDER) end
-			writefile(CFG_FILE, HttpService:JSONEncode(data))
-		end)
-		if not ok2 then
-			warn("[455Hub Config] Save failed:", err2)
-		end
+		warn("[455Hub Config] Save failed:", err)
 	end
 
 	-- Load saved values and apply to refs; falls back to defaults
 	function Config:Load()
-		if not _canUseFiles() then
+		if not _canUseFiles() or not currentName then
 			for _, entry in pairs(_entries) do
 				if entry.ref and entry.ref.Set and entry.default ~= nil then
 					pcall(function() entry.ref:Set(entry.default) end)
@@ -2207,27 +3062,17 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 			return
 		end
 
-		local data: {[string]: any} = {}
-		local ok, err = pcall(function()
-			if isfile(CFG_FILE) then
-				data = HttpService:JSONDecode(readfile(CFG_FILE))
-			end
-		end)
-		if not ok then
-			warn("[455Hub Config] Load failed:", err)
-		end
-
-		for key, entry in pairs(_entries) do
-			local ref = entry.ref
-			if ref and ref.Set then
-				local saved = data[key]
-				if saved ~= nil then
-					pcall(function() ref:Set(_deserialize(saved)) end)
-				elseif entry.default ~= nil then
-					pcall(function() ref:Set(entry.default) end)
-				end
+		local data = {}
+		local text = store.read(currentName)  -- nil when there is no file yet
+		if text then
+			local ok, decoded = pcall(function() return HttpService:JSONDecode(text) end)
+			if ok and type(decoded) == "table" then
+				data = decoded
+			else
+				warn("[455Hub Config] Load failed:", decoded)
 			end
 		end
+		_apply(data)
 	end
 
 	-- Reset all to defaults and delete the saved file
@@ -2237,13 +3082,120 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 				pcall(function() entry.ref:Set(entry.default) end)
 			end
 		end
-		if _canUseFiles() then
-			pcall(function()
-				if isfile(CFG_FILE) then
-					pcall(function() (delfile :: any)(CFG_FILE) end)
-				end
-			end)
+		if _canUseFiles() and currentName then
+			store.delete(currentName)
 		end
+	end
+
+	-- ---- config list: several named configs in the config folder ----
+
+	-- name of the config Save() / Load() use right now (nil if none)
+	function Config:Current() return currentName end
+
+	function Config:SetCurrent(name)
+		local n = _cleanConfigName(name)
+		currentName = n ~= "" and n or nil
+	end
+
+	-- saved config names, A-Z
+	function Config:List() return store.list() end
+
+	-- same as List(); call it to pick up files added or removed outside the script
+	function Config:Refresh() return store.list() end
+
+	-- save the current values as <name>.json and make it the current config
+	function Config:SaveAs(name)
+		local text, err = _encode()
+		if not text then return false, err end
+		local ok, res = store.write(name, text)
+		if not ok then return false, res end
+		currentName = res
+		return true, res
+	end
+
+	-- apply <name>.json to the elements and make it the current config
+	function Config:LoadFrom(name)
+		local text, err = store.read(name)
+		if not text then return false, err end
+		local ok, data = pcall(function() return HttpService:JSONDecode(text) end)
+		if not ok or type(data) ~= "table" then return false, "Config file is damaged" end
+		_apply(data)
+		currentName = _cleanConfigName(name)
+		return true, currentName
+	end
+
+	function Config:Rename(old, new)
+		local ok, res = store.rename(old, new)
+		if not ok then return false, res end
+		if currentName and _cleanConfigName(old) == currentName then currentName = res end
+		return true, res
+	end
+
+	-- deleting the current config stops Save() from writing until you pick another one
+	function Config:Delete(name)
+		local ok, err = store.delete(name)
+		if not ok then return false, err end
+		if _cleanConfigName(name) == currentName then currentName = nil end
+		return true
+	end
+
+	--[[
+		CreateManager: the config UI in one call. Adds a name box with "Create config", the config list
+		(pencil renames, X deletes, arrows refresh) and "Load selected" / "Save to selected".
+		`target` is a window or a folder. Clicking a row only selects it; Load applies it.
+		opts (optional): { title = "Configs", icon = "folder", icons = false }. icons = false leaves the
+		button and list icons out (for a window that has none). Returns the list.
+
+			local Cfg = Library:CreateConfig("MyHub", "default")
+			-- ...create your elements and Cfg:Register / Cfg:Link them...
+			Cfg:CreateManager(Window)
+	]]
+	function Config:CreateManager(target: any, opts: any)
+		opts = opts or {}
+		local useIcons = opts.icons ~= false
+		local function ic(name: string): string?
+			return useIcons and name or nil
+		end
+		local list: any = nil
+		local function say(text: string, kind: string)
+			if list then list:Status(text, kind) end
+		end
+
+		local nameBox = target:TextBox("Config name", "", "Name your config", nil)
+
+		target:Button("Create config", function()
+			local ok, res = Config:SaveAs(nameBox:Get())
+			if not ok then say(res or "Couldn't save", "error") return end
+			nameBox:Set("")
+			list:SetItems(Config:List())
+			list:Set(res)
+			say("Created " .. res, "ok")
+		end, ic("plus"))
+
+		list = target:ConfigList(opts.title or "Configs", Config:List(), {
+			onSelect  = function() end,   -- picking a row does nothing until Load or Save is pressed
+			onRename  = function(old, new) return Config:Rename(old, new) end,
+			onDelete  = function(name) return Config:Delete(name) end,
+			onRefresh = function() return Config:Refresh() end,
+			emptyText = "No configs yet. Name one above and press Create.",
+		}, ic(opts.icon or "folder"))
+		if Config:Current() then list:Set(Config:Current()) end
+
+		target:Button("Load selected", function()
+			local name = list:Get()
+			if not name then say("Pick a config first", "error") return end
+			local ok, err = Config:LoadFrom(name)
+			if ok then say("Loaded " .. name, "ok") else say(err or "Couldn't load", "error") end
+		end, ic("download"))
+
+		target:Button("Save to selected", function()
+			local name = list:Get()
+			if not name then say("Pick a config first", "error") return end
+			local ok, err = Config:SaveAs(name)
+			if ok then say("Saved " .. name, "ok") else say(err or "Couldn't save", "error") end
+		end, ic("save"))
+
+		return list
 	end
 
 	--[[
