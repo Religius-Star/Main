@@ -406,6 +406,7 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 	list.Size             = UDim2.new(1, 0, 0, 0)
 	list.BackgroundColor3 = T.SURFACE2
 	list.ClipsDescendants = true
+	list.Visible          = false   -- closed: a 0-height frame would still draw its outline and take a gap in the layout
 	list.LayoutOrder      = nextOrder()
 	list.Parent           = parent
 	_corner(list, 5); _stroke(list)
@@ -422,7 +423,12 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 	local function setOpen(v)
 		open = v
 		setArrow(v)
+		if v then list.Visible = true end
 		twMed(list, { Size = UDim2.new(1, 0, 0, v and listHeight() or 0) })
+		if not v then
+			-- hide it when the closing slide is over, unless it was opened again meanwhile
+			task.delay(0.24, function() if not open then list.Visible = false end end)
+		end
 		if onResize then task.delay(0.24, onResize) end
 	end
 
@@ -670,6 +676,142 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 end
 -- #endregion listview
 
+-- ============================================================
+-- COMPACT ROWS  (two controls on one row: a text box + a button, or two buttons)
+-- ============================================================
+local _ROW_DIMS = {
+	window = { h = 34, radius = 6, btnW = 92 },
+	folder = { h = 32, radius = 5, btnW = 92 },
+}
+local _ROW_GAP = 4
+
+-- one button inside a row: the look and feel of the Button element, text only
+local function _rowButton(row: Frame, name: string, pos: UDim2, size: UDim2, text: string, dims: any, callback: (() -> ())?): TextButton
+	local btn: TextButton = Instance.new("TextButton")
+	btn.Name             = name
+	btn.Position         = pos
+	btn.Size             = size
+	btn.BackgroundColor3 = T.SURFACE
+	btn.Text             = ""
+	btn.Parent           = row
+	_corner(btn, dims.radius); _stroke(btn)
+
+	local lbl: TextLabel = Instance.new("TextLabel")
+	lbl.Size                   = UDim2.new(1, -8, 1, -6)
+	lbl.Position               = UDim2.new(0, 4, 0, 3)
+	lbl.BackgroundTransparency = 1
+	lbl.Text                   = text
+	lbl.Font                   = Enum.Font.GothamBold
+	lbl.TextScaled             = true
+	lbl.TextColor3             = T.TEXT
+	lbl.ZIndex                 = btn.ZIndex + 1
+	lbl.Parent                 = btn
+	local sc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", lbl)
+	sc.MinTextSize = 8
+	sc.MaxTextSize = 12
+
+	btn.MouseEnter:Connect(function()       twFast(btn, { BackgroundColor3 = T.SURFACE2 }) end)
+	btn.MouseLeave:Connect(function()       twFast(btn, { BackgroundColor3 = T.SURFACE })  end)
+	btn.MouseButton1Down:Connect(function() twFast(btn, { BackgroundColor3 = T.ACCENT })   end)
+	btn.MouseButton1Up:Connect(function()
+		task.delay(0.12, function() twFast(btn, { BackgroundColor3 = T.SURFACE }) end)
+	end)
+	btn.MouseButton1Click:Connect(function()
+		if callback then pcall(callback) end
+	end)
+	return btn
+end
+
+-- a text box and a button side by side; callback(text) runs when the button is pressed
+local function _buildInputRow(parent: Instance, nextOrder: () -> number, dims: any, placeholder: string, buttonText: string, callback: ((string) -> ())?): any
+	local row: Frame = Instance.new("Frame")
+	row.Name                   = "InputRow"
+	row.Size                   = UDim2.new(1, 0, 0, dims.h)
+	row.BackgroundTransparency = 1
+	row.LayoutOrder            = nextOrder()
+	row.Parent                 = parent
+
+	local boxBg: Frame = Instance.new("Frame")
+	boxBg.Name             = "InputBg"
+	boxBg.Size             = UDim2.new(1, -(dims.btnW + _ROW_GAP), 1, 0)
+	boxBg.BackgroundColor3 = T.BG
+	boxBg.Parent           = row
+	_corner(boxBg, dims.radius); _stroke(boxBg, T.BORDER, 1)
+
+	local tb: TextBox = Instance.new("TextBox")
+	tb.Name                   = "Input"
+	tb.Size                   = UDim2.new(1, -16, 1, -4)
+	tb.Position               = UDim2.new(0, 8, 0, 2)
+	tb.BackgroundTransparency = 1
+	tb.Text                   = ""
+	tb.PlaceholderText        = placeholder or "Type here..."
+	tb.PlaceholderColor3      = T.TEXT_DIM
+	tb.Font                   = Enum.Font.Gotham
+	tb.TextScaled             = true
+	tb.TextColor3             = T.TEXT
+	tb.ClearTextOnFocus       = false
+	tb.TextXAlignment         = Enum.TextXAlignment.Left
+	tb.ZIndex                 = boxBg.ZIndex + 1
+	tb.Parent                 = boxBg
+	local tsc: UITextSizeConstraint = Instance.new("UITextSizeConstraint", tb)
+	tsc.MinTextSize = 8
+	tsc.MaxTextSize = 12
+
+	tb.Focused:Connect(function()
+		twFast(boxBg, { BackgroundColor3 = T.SURFACE2 })
+		local s = boxBg:FindFirstChildOfClass("UIStroke")
+		if s then s.Color = T.ACCENT end
+	end)
+	tb.FocusLost:Connect(function()
+		twFast(boxBg, { BackgroundColor3 = T.BG })
+		local s = boxBg:FindFirstChildOfClass("UIStroke")
+		if s then s.Color = T.BORDER end
+	end)
+
+	local btn = _rowButton(row, "Action", UDim2.new(1, -dims.btnW, 0, 0), UDim2.new(0, dims.btnW, 1, 0),
+		buttonText, dims, function() if callback then callback(tb.Text) end end)
+
+	local IR: any = { Box = tb, Button = btn }
+	function IR:Get(): string return tb.Text end
+	function IR:Set(v: string) tb.Text = v or "" end
+	function IR:Clear() tb.Text = "" end
+	return IR
+end
+
+-- two buttons of equal width side by side
+local function _buildButtonRow(parent: Instance, nextOrder: () -> number, dims: any, leftText: string, leftCallback: (() -> ())?, rightText: string, rightCallback: (() -> ())?): any
+	local row: Frame = Instance.new("Frame")
+	row.Name                   = "ButtonRow"
+	row.Size                   = UDim2.new(1, 0, 0, dims.h)
+	row.BackgroundTransparency = 1
+	row.LayoutOrder            = nextOrder()
+	row.Parent                 = parent
+	local half = _ROW_GAP / 2
+	local left  = _rowButton(row, "Left",  UDim2.new(0, 0, 0, 0),      UDim2.new(0.5, -half, 1, 0), leftText,  dims, leftCallback)
+	local right = _rowButton(row, "Right", UDim2.new(0.5, half, 0, 0), UDim2.new(0.5, -half, 1, 0), rightText, dims, rightCallback)
+	return { Left = left, Right = right }
+end
+
+-- ============================================================
+-- WINDOW HEIGHT  (as tall as its content, but never off the bottom of the screen)
+-- ============================================================
+-- #region winfit
+-- Plain Lua on purpose (no type annotations) so it can be tested outside Roblox.
+--   content : height of everything inside the window (the list layout's AbsoluteContentSize.Y)
+--   top     : the window's top edge (Position.Y.Offset)
+--   room    : height of the usable screen; nil or 0 while it has not been measured yet
+--   o       : { titleH, pad, margin, minH, maxH }
+local function _fitWindowHeight(content, top, room, o)
+	local cap = o.maxH
+	if room and room > 0 then
+		cap = math.min(cap, room - top - o.margin)
+	end
+	cap = math.max(cap, o.minH)
+	return math.max(o.minH, math.min(content + o.titleH + o.pad, cap))
+end
+-- #endregion winfit
+local _WIN_FIT = { titleH = T.TITLE_H, pad = 8, margin = WIN_Y, minH = 70, maxH = 380 }
+
 function Lib:CreateWindow(title: string, titleIcon: string?)
 	local winData: {[string]: any} = { shown = false }
 	table.insert(_windows, winData)
@@ -760,6 +902,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		end
 	end)
 	closeBtn.MouseButton1Click:Connect(function()
+		if winData.screenConn then winData.screenConn:Disconnect() end
 		frame:Destroy()
 		for i, w in ipairs(_windows) do
 			if w == winData then
@@ -815,16 +958,25 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	pad.Parent        = scroll
 
 	local collapsed: boolean = false
+	-- as tall as the content, but never off the bottom of the screen (the content scrolls inside)
+	local function fitHeight(): number
+		local screen = _gui.AbsoluteSize
+		return _fitWindowHeight(layout.AbsoluteContentSize.Y, frame.Position.Y.Offset, screen and screen.Y or 0, _WIN_FIT)
+	end
+	local function refit()
+		if not collapsed then
+			frame.Size = UDim2.new(0, WIN_W, 0, fitHeight())
+		end
+	end
 	local function updateCanvas()
 		task.defer(function()
 			scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
-			if not collapsed then
-				frame.Size = UDim2.new(0, WIN_W, 0,
-					math.clamp(layout.AbsoluteContentSize.Y + T.TITLE_H + 8, 70, 380))
-			end
+			refit()
 		end)
 	end
 	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+	-- the screen changing size (rotating the phone, resizing the game) refits the window
+	winData.screenConn = _gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(refit)
 
 	colBtn.MouseButton1Click:Connect(function()
 		collapsed = not collapsed
@@ -833,10 +985,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			twMed(frame, { Size = UDim2.new(0, WIN_W, 0, T.TITLE_H) })
 		else
 			colImage.Image = _icon("minus") or ""
-			twMed(frame, {
-				Size = UDim2.new(0, WIN_W, 0,
-					math.clamp(layout.AbsoluteContentSize.Y + T.TITLE_H + 8, 70, 380))
-			})
+			twMed(frame, { Size = UDim2.new(0, WIN_W, 0, fitHeight()) })
 		end
 	end)
 
@@ -869,6 +1018,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			local newX = startPos.X.Offset + delta.X
 			local newY = startPos.Y.Offset + delta.Y
 			frame.Position = UDim2.new(0, newX, 0, newY)
+			refit()   -- a window dragged lower has less room
 		end
 	end)
 
@@ -892,6 +1042,7 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 	end
 	function Win:SetPosition(x: number, y: number)
 		frame.Position = UDim2.new(0, x, 0, y)
+		refit()
 	end
 
 	function Win:Label(text: string)
@@ -1549,6 +1700,22 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 		local L = _buildConfigList(scroll, nxt, _LIST_DIMS.window, headerText, icon, items, handlers, updateCanvas)
 		updateCanvas()
 		return L
+	end
+
+	-- Two controls on one row (about half the height of two separate elements):
+	--   InputRow:  a text box and a button. callback(text) runs when the button is pressed.
+	--              Returns an object with Get(), Set(text), Clear().
+	--   ButtonRow: two buttons of equal width. Returns { Left = button, Right = button }.
+	function Win:InputRow(placeholder: string, buttonText: string, callback: ((string) -> ())?)
+		local IR = _buildInputRow(scroll, nxt, _ROW_DIMS.window, placeholder, buttonText, callback)
+		updateCanvas()
+		return IR
+	end
+
+	function Win:ButtonRow(leftText: string, leftCallback: (() -> ())?, rightText: string, rightCallback: (() -> ())?)
+		local BR = _buildButtonRow(scroll, nxt, _ROW_DIMS.window, leftText, leftCallback, rightText, rightCallback)
+		updateCanvas()
+		return BR
 	end
 
 	function Win:TextBox(labelText: string, default: string, placeholder: string, callback: (string) -> (), icon: string?)
@@ -2791,6 +2958,19 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			return L
 		end
 
+		-- the same two-controls-on-one-row elements as on the window
+		function Folder:InputRow(placeholder: string, buttonText: string, callback: ((string) -> ())?)
+			local IR = _buildInputRow(content, fnxt, _ROW_DIMS.folder, placeholder, buttonText, callback)
+			updateCanvas()
+			return IR
+		end
+
+		function Folder:ButtonRow(leftText: string, leftCallback: (() -> ())?, rightText: string, rightCallback: (() -> ())?)
+			local BR = _buildButtonRow(content, fnxt, _ROW_DIMS.folder, leftText, leftCallback, rightText, rightCallback)
+			updateCanvas()
+			return BR
+		end
+
 		return Folder
 	end
 
@@ -3140,11 +3320,12 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 	end
 
 	--[[
-		CreateManager: the config UI in one call. Adds a name box with "Create config", the config list
-		(pencil renames, X deletes, arrows refresh) and "Load selected" / "Save to selected".
+		CreateManager: the config UI in one call, in three rows so the window stays short on a phone:
+		a name box with a "Create config" button, the config list (pencil renames, X deletes, arrows
+		refresh) and "Load selected" | "Save to selected" side by side.
 		`target` is a window or a folder. Clicking a row only selects it; Load applies it.
 		opts (optional): { title = "Configs", icon = "folder", icons = false }. icons = false leaves the
-		button and list icons out (for a window that has none). Returns the list.
+		list icon out (for a window that has none). Returns the list.
 
 			local Cfg = Library:CreateConfig("MyHub", "default")
 			-- ...create your elements and Cfg:Register / Cfg:Link them...
@@ -3153,24 +3334,20 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 	function Config:CreateManager(target: any, opts: any)
 		opts = opts or {}
 		local useIcons = opts.icons ~= false
-		local function ic(name: string): string?
-			return useIcons and name or nil
-		end
 		local list: any = nil
 		local function say(text: string, kind: string)
 			if list then list:Status(text, kind) end
 		end
 
-		local nameBox = target:TextBox("Config name", "", "Name your config", nil)
-
-		target:Button("Create config", function()
-			local ok, res = Config:SaveAs(nameBox:Get())
+		local nameRow: any = nil
+		nameRow = target:InputRow("Name your config", "Create config", function(text: string)
+			local ok, res = Config:SaveAs(text)
 			if not ok then say(res or "Couldn't save", "error") return end
-			nameBox:Set("")
+			nameRow:Clear()
 			list:SetItems(Config:List())
 			list:Set(res)
 			say("Created " .. res, "ok")
-		end, ic("plus"))
+		end)
 
 		list = target:ConfigList(opts.title or "Configs", Config:List(), {
 			onSelect  = function() end,   -- picking a row does nothing until Load or Save is pressed
@@ -3178,22 +3355,20 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 			onDelete  = function(name) return Config:Delete(name) end,
 			onRefresh = function() return Config:Refresh() end,
 			emptyText = "No configs yet. Name one above and press Create.",
-		}, ic(opts.icon or "folder"))
+		}, useIcons and (opts.icon or "folder") or nil)
 		if Config:Current() then list:Set(Config:Current()) end
 
-		target:Button("Load selected", function()
+		target:ButtonRow("Load selected", function()
 			local name = list:Get()
 			if not name then say("Pick a config first", "error") return end
 			local ok, err = Config:LoadFrom(name)
 			if ok then say("Loaded " .. name, "ok") else say(err or "Couldn't load", "error") end
-		end, ic("download"))
-
-		target:Button("Save to selected", function()
+		end, "Save to selected", function()
 			local name = list:Get()
 			if not name then say("Pick a config first", "error") return end
 			local ok, err = Config:SaveAs(name)
 			if ok then say("Saved " .. name, "ok") else say(err or "Couldn't save", "error") end
-		end, ic("save"))
+		end)
 
 		return list
 	end
