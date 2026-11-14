@@ -102,14 +102,30 @@ Config:Register("fruits",      multiDropIcon, {})
 Config:Register("playerName",  nameBox,       "Guest")
 Config:Register("activateKey", keybind,       Enum.KeyCode.RightControl)
 
+-- THEME: a dropdown that switches the colors of every window. Registered in the config, the chosen
+-- theme is saved and loaded with it. From code: Library:SetTheme("Ocean"); Library:Themes() lists them
+-- (Crimson, Ocean, Emerald, Violet, Sunset, Rose). Your own theme:
+--   Library:AddTheme("Teal", { ACCENT = Color3.fromRGB(13, 148, 136), ACCENT_DIM = Color3.fromRGB(8, 66, 60) })
+-- Colors you leave out are Crimson's, and every color has to be different. Pick an ACCENT that the light
+-- text stays readable on (not a pale one). Call AddTheme BEFORE the picker is made: the picker lists the
+-- themes that exist at that moment.
+-- The picker also works straight on a window: WindowNoIcon:ThemePicker().
+local ConfigsFolder = WindowWithIcon:CreateFolder("Configs", "save")
+local themePicker   = ConfigsFolder:ThemePicker("Theme", "palette")
+Config:Register("theme", themePicker, "Crimson")
+
 -- The whole config UI in one call (here inside a folder, it also works straight on a window):
---   a name box + "Create config", the config list, "Load selected" and "Save to selected".
+--   a name box + "Create config", the config list, "Load selected" and "Save to selected", and an
+--   "Auto load config" toggle.
 --   In the list: click a row to select it, pencil = rename, X = delete (press twice), arrows = refresh.
 --   Selecting a row only selects it – "Load selected" is what applies it.
-Config:CreateManager(WindowWithIcon:CreateFolder("Configs", "save"))
+--   Auto load config: while it is on, the config you last loaded, saved or created is remembered, and the
+--   next time you run this script it starts with that config. The Config:Load() below is what applies it.
+--   From code: Config:GetAutoLoad() and Config:SetAutoLoad(true / false).
+Config:CreateManager(ConfigsFolder)
 
--- Put the saved "default" config on the controls (the defaults above are used if there is none).
--- Load changes the controls; it does not run their callbacks.
+-- Put the saved config on the controls: the one auto load remembers, otherwise "default" (the defaults
+-- above are used if there is no file). Load changes the controls; it does not run their callbacks.
 Config:Load()
 
 
@@ -193,6 +209,9 @@ folderNoIcon:TextBox("Folder TextBox", "", "Type here...", function(v) print("Fo
 folderNoIcon:Keybind("Folder Keybind", Enum.KeyCode.H, function(key)
     print("Folder key (no icon):", key and key.Name or "none")
 end)
+
+-- Theme picker straight on the window, no icon (it stays in step with the one in the first window)
+WindowNoIcon:ThemePicker()
 
 -- Config UI straight on the window, without icons
 local ConfigNoIcon = Library:CreateConfig("arodUI_Configs_NoIcon", "default")
