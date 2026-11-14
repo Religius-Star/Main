@@ -61,8 +61,16 @@ local T = {
 	WIN_Y      = 8,
 }
 
+-- Tweens that are still running. A theme change finishes them first (see _finishRunningTweens), so a fade
+-- that was heading for the old accent cannot land on it after the switch.
+local _tweenSeq = 0
+local _running = setmetatable({}, { __mode = "k" })   -- tween -> { obj, props, seq }
 local function tw(obj, t, props)
-	TweenService:Create(obj, TweenInfo.new(t, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
+	local tween = TweenService:Create(obj, TweenInfo.new(t, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props)
+	_tweenSeq += 1
+	_running[tween] = { obj = obj, props = props, seq = _tweenSeq }
+	tween.Completed:Connect(function() _running[tween] = nil end)
+	tween:Play()
 end
 local function twFast(obj, props) tw(obj, 0.12, props) end
 local function twMed(obj, props)  tw(obj, 0.22, props) end
@@ -116,6 +124,165 @@ local function _makeIcon(parent: Instance, iconId: string, size: number?, color:
 	img.ScaleType             = Enum.ScaleType.Fit
 	img.Parent                = parent
 	return img
+end
+
+-- ============================================================
+-- THEMES
+--   Lib:SetTheme("Ocean")    switch: everything that exists is recolored, everything built later reads T
+--   Lib:GetTheme()           name of the theme in use
+--   Lib:Themes()             names of all themes, in order
+--   Lib:AddTheme(name, {})   your own theme: any of BG SURFACE SURFACE2 BORDER ACCENT ACCENT_DIM TEXT TEXT_DIM
+--                            (colors you leave out come from Crimson; every color must be different)
+--   Lib:ThemeColors(name?)   a copy of a theme's colors (the one in use when no name is given)
+--   Window:ThemePicker()     a dropdown that switches the theme (also on folders); register it with a
+--                            config and the theme is saved and loaded with it:
+--                                Cfg:Register("theme", Window:ThemePicker(), "Crimson")
+-- ============================================================
+local _PALETTE = { "BG", "SURFACE", "SURFACE2", "BORDER", "ACCENT", "ACCENT_DIM", "TEXT", "TEXT_DIM" }
+
+local function _copyPalette(p: any): any
+	local out = {}
+	for _, k in ipairs(_PALETTE) do out[k] = p[k] end
+	return out
+end
+
+local _themes: any     = {}   -- name -> palette
+local _themeNames: any = {}   -- in the order they were added
+local _theme: string   = "Crimson"
+local _pickers: any    = {}   -- the dropdowns ThemePicker made, so they can show the theme in use
+
+local function _defineTheme(name: string, palette: any)
+	_themes[name] = palette
+	table.insert(_themeNames, name)
+end
+
+-- the built-in themes keep the dark base and differ in the accent
+local _BASE = _copyPalette(T)   -- Crimson: the look the library started with
+local function _preset(name: string, accent: Color3, dim: Color3)
+	local p = _copyPalette(_BASE)
+	p.ACCENT, p.ACCENT_DIM = accent, dim
+	_defineTheme(name, p)
+end
+_defineTheme("Crimson", _copyPalette(_BASE))
+_preset("Ocean",   Color3.fromRGB(20, 120, 235), Color3.fromRGB(9, 54, 106))
+_preset("Emerald", Color3.fromRGB(5, 150, 105),  Color3.fromRGB(3, 68, 47))
+_preset("Violet",  Color3.fromRGB(139, 92, 246), Color3.fromRGB(63, 42, 111))
+_preset("Sunset",  Color3.fromRGB(217, 95, 10),  Color3.fromRGB(98, 43, 5))
+_preset("Rose",    Color3.fromRGB(225, 60, 140), Color3.fromRGB(101, 27, 63))
+
+-- which properties carry palette colors, per class (reading a property a class does not have is an error)
+local _THEME_PROPS = {
+	Frame          = { "BackgroundColor3" },
+	TextLabel      = { "BackgroundColor3", "TextColor3" },
+	TextButton     = { "BackgroundColor3", "TextColor3" },
+	TextBox        = { "BackgroundColor3", "TextColor3", "PlaceholderColor3" },
+	ImageLabel     = { "BackgroundColor3", "ImageColor3" },
+	ImageButton    = { "BackgroundColor3", "ImageColor3" },
+	ScrollingFrame = { "BackgroundColor3", "ScrollBarImageColor3" },
+	UIStroke       = { "Color" },
+}
+
+-- Finish the tweens that are running: they were started with colors of the theme that is going away and
+-- would end on them. Finished now, their colors get repainted like all the others.
+local function _finishRunningTweens()
+	local list = {}
+	for tween, e in pairs(_running) do table.insert(list, { tween = tween, e = e }) end
+	table.sort(list, function(a, b) return a.e.seq < b.e.seq end)   -- when two fight over a property, the newer wins
+	for _, it in ipairs(list) do
+		_running[it.tween] = nil
+		pcall(function() it.tween:Cancel() end)
+		for prop, goal in pairs(it.e.props) do
+			pcall(function() it.e.obj[prop] = goal end)
+		end
+	end
+end
+
+-- Give every color of the old theme the matching color of the new one. One pass: each color is read once and
+-- written once, so a theme whose colors are the old ones moved over (BG becomes what SURFACE was) is safe.
+local function _repaint(old: any, new: any)
+	for _, obj in ipairs(_gui:GetDescendants()) do
+		local props = _THEME_PROPS[obj.ClassName]
+		if props then
+			for _, prop in ipairs(props) do
+				local ok, cur = pcall(function() return obj[prop] end)
+				if ok and cur ~= nil then
+					for _, k in ipairs(_PALETTE) do
+						if cur == old[k] then
+							if new[k] ~= old[k] then obj[prop] = new[k] end
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+function Lib:GetTheme(): string
+	return _theme
+end
+
+function Lib:Themes()
+	local out = {}
+	for i, n in ipairs(_themeNames) do out[i] = n end
+	return out
+end
+
+function Lib:ThemeColors(name: string?): any
+	local p = _themes[name or _theme]
+	return p and _copyPalette(p) or nil
+end
+
+-- Returns true, name  or  false, reason
+function Lib:SetTheme(name: string)
+	local new = _themes[name]
+	if not new then return false, "Unknown theme '" .. tostring(name) .. "'" end
+	if name ~= _theme then
+		_finishRunningTweens()
+		local old = _copyPalette(T)
+		for _, k in ipairs(_PALETTE) do T[k] = new[k] end
+		_theme = name
+		_repaint(old, new)
+	end
+	for _, dd in ipairs(_pickers) do pcall(function() dd:Set(name) end) end
+	return true, name
+end
+
+-- Returns true  or  false, reason
+function Lib:AddTheme(name: string, colors: any)
+	if type(name) ~= "string" or name == "" then return false, "A theme needs a name" end
+	if _themes[name] then return false, "There is already a theme called '" .. name .. "'" end
+	if type(colors) ~= "table" then return false, "AddTheme needs a table of colors" end
+	local isKey = {}
+	for _, k in ipairs(_PALETTE) do isKey[k] = true end
+	local p = _copyPalette(_BASE)
+	for k, v in pairs(colors) do
+		if not isKey[k] then
+			return false, "'" .. tostring(k) .. "' is not a color of the palette (" .. table.concat(_PALETTE, ", ") .. ")"
+		end
+		if typeof(v) ~= "Color3" then return false, k .. " must be a Color3" end
+		p[k] = v
+	end
+	for i = 1, #_PALETTE do
+		for j = i + 1, #_PALETTE do
+			if p[_PALETTE[i]] == p[_PALETTE[j]] then
+				return false, _PALETTE[i] .. " and " .. _PALETTE[j] .. " are the same color; every color needs to be different"
+			end
+		end
+	end
+	_defineTheme(name, p)
+	return true
+end
+
+-- a dropdown (on a window or a folder) that lists the themes and switches to the one picked
+local function _makeThemePicker(target: any, headerText: string?, icon: any): any
+	local dd = target:Dropdown(headerText or "Theme", Lib:Themes(), function(v: string) Lib:SetTheme(v) end, icon)
+	dd:Set(_theme)
+	table.insert(_pickers, dd)
+	local P = {}
+	function P:Get(): string return _theme end
+	function P:Set(name: string) Lib:SetTheme(name) end
+	return P
 end
 
 local function _reposition()
@@ -471,7 +638,8 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 	end
 
 	-- a small button on the right side of a row: an icon if it loaded, a text glyph if not
-	local function iconButton(row, name, rightOffset, iconName, fallback, color, onClick)
+	-- colorKey is the name of a palette color ("TEXT_DIM", "ACCENT"), read from T every time it is needed
+	local function iconButton(row, name, rightOffset, iconName, fallback, colorKey, onClick)
 		local b = Instance.new("TextButton")
 		b.Name                   = name
 		b.Size                   = UDim2.new(0, dims.btn, 0, dims.btn)
@@ -484,7 +652,7 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 		local id = _icon(iconName)
 		local glyph, prop
 		if id then
-			glyph = _makeIcon(b, id, dims.btn - 8, color)
+			glyph = _makeIcon(b, id, dims.btn - 8, T[colorKey])
 			glyph.AnchorPoint = Vector2.new(0.5, 0.5)
 			glyph.Position    = UDim2.new(0.5, 0, 0.5, 0)
 			prop = "ImageColor3"
@@ -493,7 +661,7 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 			glyph.Size                   = UDim2.new(1, 0, 1, 0)
 			glyph.BackgroundTransparency = 1
 			glyph.Text                   = fallback
-			glyph.TextColor3             = color
+			glyph.TextColor3             = T[colorKey]
 			glyph.Font                   = Enum.Font.GothamBold
 			glyph.TextScaled             = true
 			glyph.Parent                 = b
@@ -502,13 +670,13 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 		end
 		glyph.ZIndex = b.ZIndex + 1
 		b.MouseEnter:Connect(function() twFast(glyph, { [prop] = T.ACCENT }) end)
-		b.MouseLeave:Connect(function() twFast(glyph, { [prop] = color }) end)
+		b.MouseLeave:Connect(function() twFast(glyph, { [prop] = T[colorKey] }) end)
 		b.MouseButton1Click:Connect(function() onClick(glyph) end)
 		return b, glyph
 	end
 
 	-- refresh button in the header (left of the arrow); its icon spins once when pressed
-	iconButton(head, "Refresh", 6 + 12 + 4, "refresh-cw", "↻", T.TEXT_DIM, function(glyph)
+	iconButton(head, "Refresh", 6 + 12 + 4, "refresh-cw", "↻", "TEXT_DIM", function(glyph)
 		glyph.Rotation = 0
 		twSlow(glyph, { Rotation = 360 })
 		model.refresh()
@@ -566,8 +734,8 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 					model.cancel()
 				end
 			end)
-			iconButton(row, "Cancel", 4, "x", "✕", T.TEXT_DIM, function() model.cancel() end)
-			iconButton(row, "Save", 4 + dims.btn + 2, "check", "✓", T.ACCENT, function() model.commitRename(box.Text) end)
+			iconButton(row, "Cancel", 4, "x", "✕", "TEXT_DIM", function() model.cancel() end)
+			iconButton(row, "Save", 4 + dims.btn + 2, "check", "✓", "ACCENT", function() model.commitRename(box.Text) end)
 			task.defer(function() box:CaptureFocus() end)
 			return
 		end
@@ -607,12 +775,12 @@ local function _buildConfigList(parent, nextOrder, dims, headerText, iconName, i
 			sure.MouseButton1Click:Connect(function() model.pressDelete(name) end)
 		else
 			nameLabel(row, name, dims.btn * 2 + 10, selected)
-			iconButton(row, "Delete", 4, "x", "✕", T.TEXT_DIM, function()
+			iconButton(row, "Delete", 4, "x", "✕", "TEXT_DIM", function()
 				model.pressDelete(name)
 				local token = model.armToken
 				task.delay(3, function() model.disarm(token) end)   -- the confirm wears off
 			end)
-			iconButton(row, "Rename", 4 + dims.btn + 2, "pencil", "Aa", T.TEXT_DIM, function()
+			iconButton(row, "Rename", 4 + dims.btn + 2, "pencil", "Aa", "TEXT_DIM", function()
 				model.beginRename(name)
 			end)
 		end
@@ -1690,6 +1858,11 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			end
 		end
 		return D
+	end
+
+	-- A dropdown that switches the theme (see THEMES above). Get() is the theme in use; Set(name) switches to it.
+	function Win:ThemePicker(headerText: string?, icon: any)
+		return _makeThemePicker(Win, headerText, icon)
 	end
 
 	-- Config list: a dropdown of saved configs. The pencil renames a row, the X deletes it (press twice),
@@ -2958,6 +3131,11 @@ function Lib:CreateWindow(title: string, titleIcon: string?)
 			return L
 		end
 
+		-- the theme dropdown, as on the window
+		function Folder:ThemePicker(headerText: string?, icon: any)
+			return _makeThemePicker(Folder, headerText, icon)
+		end
+
 		-- the same two-controls-on-one-row elements as on the window
 		function Folder:InputRow(placeholder: string, buttonText: string, callback: ((string) -> ())?)
 			local IR = _buildInputRow(content, fnxt, _ROW_DIMS.folder, placeholder, buttonText, callback)
@@ -3095,6 +3273,37 @@ local function _newConfigStore(folder, fs)
 		return true, new
 	end
 
+	-- AUTO LOAD SETTING: <folder>/autoload.txt holds "on" or "off", then the name of the config the
+	-- next run starts with. A .txt on purpose: it never shows up in the list of configs.
+	local function autoloadFile() return folder .. "/autoload.txt" end
+
+	-- returns enabled (true / false), name (the config to start with, or nil)
+	function store.readAutoload()
+		if not (fs.isfile and fs.readfile) then return false, nil end
+		local okFile, found = pcall(fs.isfile, autoloadFile())
+		if not okFile or found ~= true then return false, nil end
+		local okRead, text = pcall(fs.readfile, autoloadFile())
+		if not okRead or type(text) ~= "string" then return false, nil end
+		local state, rest = text:match("^%s*(%a*)%s*(.-)%s*$")
+		if not state or state:lower() ~= "on" then return false, nil end
+		local name = _cleanConfigName(rest:match("^[^\r\n]*"))
+		return true, name ~= "" and name or nil
+	end
+
+	-- saves the setting (the name only matters when it is on). Returns true  or  false, reason
+	function store.writeAutoload(enabled, name)
+		if not (fs.writefile and fs.isfolder and fs.makefolder) then
+			return false, "Your executor can't save files"
+		end
+		local text = enabled and ("on\n" .. _cleanConfigName(name)) or "off"
+		local ok, err = pcall(function()
+			if not fs.isfolder(folder) then fs.makefolder(folder) end
+			fs.writefile(autoloadFile(), text)
+		end)
+		if not ok then return false, "Couldn't save: " .. tostring(err) end
+		return true
+	end
+
 	return store
 end
 -- #endregion store
@@ -3132,6 +3341,20 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 		isfolder = isfolder, makefolder = makefolder, isfile = isfile, readfile = readfile,
 		writefile = writefile, listfiles = listfiles, delfile = delfile,
 	})
+
+	-- AUTO LOAD: while it is on, the config you load, save or create is remembered between runs, and the
+	-- next run starts with it as the current config (so Config:Load() puts it on the controls)
+	local autoLoad = false
+	do
+		local on, remembered = store.readAutoload()
+		autoLoad = on
+		if on and remembered and store.exists(remembered) then currentName = remembered end
+	end
+	-- every change of the current config goes through here, so auto load can remember it
+	local function _setCurrent(name)
+		currentName = name
+		if autoLoad then store.writeAutoload(true, currentName) end
+	end
 
 	local _entries: {[string]: {ref: any, default: any}} = {}
 	local HttpService = game:GetService("HttpService")
@@ -3274,7 +3497,7 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 
 	function Config:SetCurrent(name)
 		local n = _cleanConfigName(name)
-		currentName = n ~= "" and n or nil
+		_setCurrent(n ~= "" and n or nil)
 	end
 
 	-- saved config names, A-Z
@@ -3289,7 +3512,7 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 		if not text then return false, err end
 		local ok, res = store.write(name, text)
 		if not ok then return false, res end
-		currentName = res
+		_setCurrent(res)
 		return true, res
 	end
 
@@ -3300,14 +3523,14 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 		local ok, data = pcall(function() return HttpService:JSONDecode(text) end)
 		if not ok or type(data) ~= "table" then return false, "Config file is damaged" end
 		_apply(data)
-		currentName = _cleanConfigName(name)
+		_setCurrent(_cleanConfigName(name))
 		return true, currentName
 	end
 
 	function Config:Rename(old, new)
 		local ok, res = store.rename(old, new)
 		if not ok then return false, res end
-		if currentName and _cleanConfigName(old) == currentName then currentName = res end
+		if currentName and _cleanConfigName(old) == currentName then _setCurrent(res) end
 		return true, res
 	end
 
@@ -3315,15 +3538,33 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 	function Config:Delete(name)
 		local ok, err = store.delete(name)
 		if not ok then return false, err end
-		if _cleanConfigName(name) == currentName then currentName = nil end
+		if _cleanConfigName(name) == currentName then _setCurrent(nil) end
+		return true
+	end
+
+	-- ---- auto load: start the next run with the config you were using ----
+
+	-- is auto load on? (the manager's "Auto load config" toggle shows this)
+	function Config:GetAutoLoad(): boolean return autoLoad end
+
+	-- While it is on, the config you last loaded, saved or created is remembered (<folder>/autoload.txt)
+	-- and the next run starts with it as the current config, so your script's Config:Load() applies it.
+	-- Returns true  or  false, reason
+	function Config:SetAutoLoad(on: boolean)
+		on = on == true
+		local ok, err = store.writeAutoload(on, currentName)
+		if not ok then return false, err end
+		autoLoad = on
 		return true
 	end
 
 	--[[
-		CreateManager: the config UI in one call, in three rows so the window stays short on a phone:
+		CreateManager: the config UI in one call, in four rows so the window stays short on a phone:
 		a name box with a "Create config" button, the config list (pencil renames, X deletes, arrows
-		refresh) and "Load selected" | "Save to selected" side by side.
+		refresh), "Load selected" | "Save to selected" side by side, and an "Auto load config" toggle.
 		`target` is a window or a folder. Clicking a row only selects it; Load applies it.
+		Auto load config: while it is on, the config you last loaded, saved or created is remembered and
+		the next run of your script starts with it, so the Config:Load() in your script applies it.
 		opts (optional): { title = "Configs", icon = "folder", icons = false }. icons = false leaves the
 		list icon out (for a window that has none). Returns the list.
 
@@ -3369,6 +3610,19 @@ function Lib:CreateConfig(folderName: string, fileName: string)
 			local ok, err = Config:SaveAs(name)
 			if ok then say("Saved " .. name, "ok") else say(err or "Couldn't save", "error") end
 		end)
+
+		local autoRow: any = nil
+		autoRow = target:Toggle("Auto load config", Config:GetAutoLoad(), function(on: boolean)
+			local ok, err = Config:SetAutoLoad(on)
+			if not ok then
+				autoRow:Set(not on)   -- it could not be saved, so the toggle goes back
+				say(err or "Couldn't change it", "error")
+				return
+			end
+			if not on then say("Auto load off", "ok") return end
+			local current = Config:Current()
+			say(current and ("Auto load on: " .. current) or "Auto load on. Load or save a config to pick it", "ok")
+		end, useIcons and "zap" or nil)
 
 		return list
 	end
